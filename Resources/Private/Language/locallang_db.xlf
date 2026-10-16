@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.0">
+  <file source-language="en" datatype="plaintext" original="messages" date="2026-10-16T00:00:00Z">
+    <header />
+    <body>
+      <trans-unit id="tx_solrcontentapi_domain_model_apikey">
+        <source>Solr Content API keys</source>
+      </trans-unit>
+      <trans-unit id="tx_solrcontentapi_domain_model_apikey.label">
+        <source>Label</source>
+      </trans-unit>
+      <trans-unit id="tx_solrcontentapi_domain_model_apikey.api_key">
+        <source>API key</source>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

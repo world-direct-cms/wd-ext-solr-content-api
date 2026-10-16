@@ -1,0 +1,172 @@
+<!-- omit in toc -->
+# EXT:solr-content-api
+
+<!-- omit in toc -->
+## Inhaltsverzeichnis
+- [Bezeichnungen](#bezeichnungen)
+- [Aufgabenstellung](#aufgabenstellung)
+- [Datengrundlage](#datengrundlage)
+- [File Export](#file-export)
+- [API](#api)
+  - [Solr-Verbindung und Dokumentauswahl](#solr-verbindung-und-dokumentauswahl)
+  - [Sicherheit](#sicherheit)
+  - [API-Key-Verwaltung](#api-key-verwaltung)
+  - [file-export](#file-export-1)
+  - [Fehlerverhalten](#fehlerverhalten)
+- [Nicht funktionale Anforderungen](#nicht-funktionale-anforderungen)
+- [Phase 2](#phase-2)
+  - [API](#api-1)
+    - [changes](#changes)
+    - [detail](#detail)
+    - [index](#index)
+
+## Bezeichnungen
+- `LLM`: Large Language Model (eine KI im Prinzip).
+- `Documents`: Ein einzelner Solr-Eintrag, unabhängig von der TYPO3-Tabelle.
+- `type`: Solr-Property, das den Index Type bzw. Tabellennamen des Documents enthält.
+- `Core`: Eine Solr-Collection, die einer TYPO3-Site-Konfiguration zugeordnet ist.
+
+## Aufgabenstellung
+- Es geht darum, eine REST-Schnittstelle in TYPO3 bereitzustellen, die Daten aus den konfigurierten Solr-Cores liest und für ein LLM zurückgibt.
+- `worlddirect/solr-content-api` ist eine eigenständige TYPO3-Extension und kommuniziert ausschließlich mit Solr. Eine Abstraktion für weitere Datenquellen ist nicht vorgesehen.
+
+## Datengrundlage
+- Als Datengrundlage dienen die Solr Documents, wie sie für die Verarbeitung durch die KI benötigt werden.
+- Alle in der TYPO3 Site Configuration konfigurierten Sites und deren Solr-Cores werden berücksichtigt. Verbindungsdaten wie Schema, Host, Port, Pfad, Core und Zugangsdaten kommen aus der jeweiligen Site Configuration der EXT:solr und werden nicht separat in der Extension hinterlegt.
+- Alle in EXT:solr konfigurierten Index-Queue-Konfigurationen (Index Types) werden berücksichtigt. Maßgeblich ist die für die jeweilige Site wirksame EXT:solr-Konfiguration.
+- Es werden ausschließlich Solr Documents und deren Felder ausgegeben. Ein Nachladen aus der TYPO3-Datenbank sowie eine Umbenennung oder sonstige Normalisierung der Solr-Felder findet nicht statt.
+- Jedes Document enthält verpflichtend die Solr-Felder `type`, `uid`, `pid`, `created`, `changed`, `indexed` und `url`. Diese Felder werden immer ausgegeben und können nicht durch eine Feldkonfiguration entfernt werden.
+- Eine extensionseigene Feldkonfiguration kann gemeinsame zusätzliche Standardfelder definieren, die bei jedem Document ausgegeben werden. Zusätzlich können pro Index Type weitere Felder konfiguriert werden. Feldnamen und Werte bleiben unverändert; nicht freigegebene Felder werden nicht ausgegeben.
+
+## File Export
+- Der Console Command trägt den Namen `Solr Content API - File Export`. Sein technischer TYPO3-CLI-Bezeichner lautet `solr-content-api:file-export`.
+- Der Command exportiert alle konfigurierten Index Types aus allen Solr-Cores als JSON-Datei. Jedes Document wird dem Core und seinem Index Type zugeordnet.
+- Die Datei `/var/www/html/var/json/export.json` enthält den Startzeitpunkt des Commands als UTC-Zeitstempel (`exportTimestamp`) sowie je Core die Anzahl und Documents. Jedes Document enthält mindestens die sieben Pflichtfelder sowie die konfigurierten zusätzlichen Felder.
+- Der Export liest Solr-Ergebnisse paginiert. Die Sortierung muss je Core stabil und eindeutig sein, damit bei großen Datenmengen keine Documents übersprungen oder doppelt ausgegeben werden.
+- Ein fehlgeschlagener Export darf eine zuvor erfolgreich erzeugte Datei nicht ersetzen.
+- Der Console Command kann regelmäßig als `Scheduled Task` ausgeführt oder bei Bedarf händisch gestartet werden. Das Verzeichnis `/var/www/html/var/json` muss dafür existieren oder angelegt werden können und für den TYPO3-Prozess beschreibbar sein.
+- Eine TYPO3-Backend-Sperre verhindert keine Änderungen am Solr-Index und garantiert daher keinen konsistenten Solr-Snapshot. Der Zeitstempel bezeichnet den Exportstart; eine atomare Momentaufnahme über mehrere Cores ist nicht zugesichert.
+
+## API
+- Die API hat den Prefix `/api/v1`.
+- Es werden ausschließlich HTTP-GET-Anfragen unterstützt. Die Authentifizierung erfolgt über den Header `X-Api-Key`.
+
+### Solr-Verbindung und Dokumentauswahl
+- Für jede TYPO3-Site werden Verbindungsdaten und Core aus der Site Configuration der EXT:solr gelesen. Die API gibt keine Verbindungsdetails an Clients zurück.
+- Die Auswahl der Index Types folgt den für die jeweilige Site konfigurierten EXT:solr-Index-Queues.
+- Pro Type gilt die gemeinsame Standard-Feldliste; zusätzlich werden konfigurierte Type-Felder ausgegeben. Ein Document bleibt dem Core zugeordnet, aus dem es gelesen wurde.
+
+### Sicherheit
+- Zugriffe auf die API werden mittels API-Keys abgesichert.
+- API-Key, Solr-Zugangsdaten, interne URLs, rohe Solr-Antworten und Exception-Details dürfen nicht in API-Responses oder regulären Logs ausgegeben werden.
+
+### API-Key-Verwaltung
+- API-Keys werden als Datensätze der Tabelle `tx_solrcontentapi_domain_model_apikey` verwaltet, nicht als statische Extension-Konfiguration oder Umgebungsvariable.
+- Die Verwaltung erfolgt über das TYPO3-Standard-List-Modul. Ein eigenes Backend-Modul oder Dashboard-Widget ist nicht erforderlich.
+- Jeder Datensatz enthält mindestens `label` als Freitext-Kommentar, `api_key` als gehashten Key und `hidden` zur sofortigen Invalidierung. TYPO3 stellt `uid`, `pid`, `tstamp`, `crdate` und `deleted` über das Standardschema bereit.
+- Das TCA-Feld `api_key` verwendet den Core-Feldtyp `password` mit `hashed => true`. Der DataHandler hasht den Wert beim Speichern; Klartext wird nicht in der Datenbank abgelegt.
+- Der TYPO3-Passwortgenerator muss explizit über `fieldControl.passwordGenerator` aktiviert werden:
+  ```php
+  'api_key' => [
+      'exclude' => false,
+      'label' => 'LLL:EXT:solr_content_api/Resources/Private/Language/locallang_db.xlf:tx_solrcontentapi_domain_model_apikey.api_key',
+      'config' => [
+          'type' => 'password',
+          'size' => 40,
+          'hashed' => true,
+          'required' => true,
+          'fieldControl' => [
+              'passwordGenerator' => [
+                  'renderType' => 'passwordGenerator',
+                  'options' => ['allowEdit' => true],
+              ],
+          ],
+      ],
+  ],
+  ```
+- Das zugehörige `ext_tables.sql` ergänzt nur die fachlichen Spalten:
+  ```sql
+  CREATE TABLE tx_solrcontentapi_domain_model_apikey (
+      label varchar(255) DEFAULT '' NOT NULL,
+      api_key varchar(255) DEFAULT '' NOT NULL,
+  );
+  ```
+- Mehrere Keys können parallel existieren. Jeder kann unabhängig gesperrt werden, sodass eine Rotation ohne Unterbrechung möglich ist.
+- Einen neuen Key legt ein berechtigter Backend-Benutzer im List-Modul an, erzeugt ihn mit dem Passwortgenerator und kopiert ihn unmittelbar. Nach dem Speichern ist nur der Hash verfügbar.
+- Der Zugriff auf die Tabelle wird über reguläre TYPO3-Backend-Benutzergruppen-Rechte auf einen begrenzten Personenkreis eingeschränkt.
+- Die Middleware prüft den eingehenden Key gegen alle nicht ausgeblendeten (`hidden = 0`) Datensätze mittels `checkPassword()` der `PasswordHashFactory`.
+- Für Logging- und Audit-Zwecke dürfen `uid` und `label` des passenden Datensatzes protokolliert werden, niemals der Key selbst.
+
+### file-export
+- `GET /api/v1/file-export` liefert die zuletzt erfolgreich erzeugte Exportdatei als JSON. Der Aufruf startet keinen Export; dieser wird über den Console Command `solr-content-api:file-export` erzeugt. Der Endpoint akzeptiert keine Query-Parameter.
+- Vor der Antwort wird die Erreichbarkeit aller konfigurierten Solr-Cores geprüft. Ist mindestens ein Core nicht erreichbar, antwortet der Endpoint mit `503 Service Unavailable` und `solr_unavailable`, statt einen möglicherweise unvollständigen Datenstand auszuliefern.
+- Die Antwort enthält `exportTimestamp` und eine Liste der exportierten Cores. Jeder Eintrag enthält Site-Kennung, Core-Namen, Anzahl und Documents. Beispiel:
+  ```json
+  {
+    "exportTimestamp": "2026-10-16T10:00:00Z",
+    "cores": [
+      {
+        "site": "main",
+        "core": "core_de",
+        "count": 1,
+        "documents": [
+          {
+            "type": "pages",
+            "uid": 123,
+            "pid": 1,
+            "created": "2026-10-15T08:00:00Z",
+            "changed": "2026-10-16T09:30:00Z",
+            "indexed": "2026-10-16T09:31:00Z",
+            "url": "https://example.org/beispiel",
+            "title": "Beispiel"
+          }
+        ]
+      }
+    ]
+  }
+  ```
+
+### Fehlerverhalten
+- Fehler werden als JSON mit einem maschinenlesbaren `code` und einer verständlichen, nicht-technischen `message` zurückgegeben. Technische Details werden ausschließlich serverseitig protokolliert.
+- Beispiel für einen Solr-Ausfall:
+  ```json
+  {
+    "error": {
+      "code": "solr_unavailable",
+      "message": "Solr ist vorübergehend nicht verfügbar."
+    }
+  }
+  ```
+- Verbindliche Fehlerfälle:
+  - `400 Bad Request` (`invalid_request`): ungültige Anfrage oder Parameter.
+  - `401 Unauthorized` (`unauthorized`): API-Key fehlt oder ist ungültig.
+  - `404 Not Found` (`endpoint_not_found`): unbekannter API-Pfad.
+  - `404 Not Found` (`file_export_unavailable`): es wurde noch kein erfolgreicher File Export erzeugt.
+  - `405 Method Not Allowed` (`method_not_allowed`): HTTP-Methode ist nicht `GET`; der Response enthält `Allow: GET`.
+  - `503 Service Unavailable` (`solr_unavailable`): mindestens ein Solr-Core ist nicht erreichbar oder antwortet nicht rechtzeitig.
+  - `500 Internal Server Error` (`internal_error`): unerwarteter interner Fehler ohne Offenlegung technischer Details.
+- Bei nicht verfügbarem Solr liefert die API eine allgemeine Meldung, dass der Dienst vorübergehend nicht verfügbar ist. Der konkrete Verbindungsfehler wird nur serverseitig protokolliert, ohne Zugangsdaten.
+
+## Nicht funktionale Anforderungen
+- Es soll eine TYPO3-Extension `worlddirect/solr-content-api` erstellt werden.
+- Sie soll mit TYPO3 Version 12 und 13 kompatibel sein. TYPO3 Version 14 ist optional, wenn es leicht möglich ist.
+
+## Phase 2
+- Phase 2 ist aktuell nicht Teil der Umsetzung. Die folgenden Punkte sind für eine spätere Phase vorgemerkt.
+
+### API
+
+#### changes
+- Diese Methode wird in Phase 1 nicht implementiert.
+- Sie bekommt den Parameter `since` übergeben.
+- Als Ergebnis wird eine Liste mit allen Documents zurückgegeben, welche seit dem `since`-Zeitstempel geändert wurden.
+- Die Liste enthält nur, welche Datensätze geändert wurden, nicht die eigentlichen Inhalte.
+
+#### detail
+- Diese Methode wird in Phase 1 nicht implementiert.
+- Sie liefert die Details eines Documents zurück.
+
+#### index
+- Diese Methode wird in Phase 1 nicht implementiert.
+- Sie liefert eine Gesamtliste aller Documents ab. Das Ergebnis entspricht dem File Export ohne Inhalte; ausgegeben werden nur `uid` und `type`.
+- Sie soll dem LLM helfen abzugleichen, welche Inhalte aktuell sind, da Löschungen andernfalls nicht erkannt werden.
