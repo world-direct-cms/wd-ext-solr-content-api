@@ -177,7 +177,14 @@ final class SolrExportService
             $this->fieldConfiguration['types'][(string)$type] ?? [],
         ));
 
-        return array_intersect_key($document, array_fill_keys($allowedFields, true));
+        $filteredDocument = [];
+        foreach ($allowedFields as $field) {
+            if (array_key_exists($field, $document)) {
+                $filteredDocument[$field] = $document[$field];
+            }
+        }
+
+        return $filteredDocument;
     }
 
     /**
