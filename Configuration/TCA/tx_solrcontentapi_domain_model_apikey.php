@@ -19,6 +19,9 @@ return [
         'default_sortby' => 'label ASC',
         'searchFields' => 'label',
         'rootLevel' => -1,
+        'typeicon_classes' => [
+            'default' => 'solrcontentapi-apikey',
+        ],
     ],
     'columns' => [
         'hidden' => [

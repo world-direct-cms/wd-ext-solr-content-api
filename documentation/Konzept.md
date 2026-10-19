@@ -40,8 +40,8 @@
 
 ## File Export
 - Der Console Command trägt den Namen `Solr Content API - File Export`. Sein technischer TYPO3-CLI-Bezeichner lautet `solr-content-api:file-export`.
-- Der Command exportiert alle konfigurierten Index Types aus allen Solr-Cores als JSON-Datei. Jedes Document wird dem Core und seinem Index Type zugeordnet.
-- Die Datei `/var/www/html/var/json/export.json` enthält den Startzeitpunkt des Commands als UTC-Zeitstempel (`exportTimestamp`) sowie je Core die Anzahl und Documents. Jedes Document enthält mindestens die sieben Pflichtfelder sowie die konfigurierten zusätzlichen Felder.
+- Der Command exportiert alle konfigurierten Index Types aus allen Solr-Cores als JSON-Datei. Documents werden unter `types` nach ihrem Index Type gruppiert und coreübergreifend zusammengeführt. Site-Kennung, Core-Name und Core-Metadaten werden nicht ausgegeben.
+- Die Datei `/var/www/html/var/json/export.json` enthält den Startzeitpunkt des Commands als UTC-Zeitstempel (`exportTimestamp`) sowie je Index Type die Anzahl der exportierten Einträge (`count`) und das Array `documents`. Jedes Document enthält mindestens die sieben Pflichtfelder sowie die konfigurierten zusätzlichen Felder.
 - Der Export liest Solr-Ergebnisse paginiert. Die Sortierung muss je Core stabil und eindeutig sein, damit bei großen Datenmengen keine Documents übersprungen oder doppelt ausgegeben werden.
 - Ein fehlgeschlagener Export darf eine zuvor erfolgreich erzeugte Datei nicht ersetzen.
 - Der Console Command kann regelmäßig als `Scheduled Task` ausgeführt oder bei Bedarf händisch gestartet werden. Das Verzeichnis `/var/www/html/var/json` muss dafür existieren oder angelegt werden können und für den TYPO3-Prozess beschreibbar sein.
@@ -54,7 +54,7 @@
 ### Solr-Verbindung und Dokumentauswahl
 - Für jede TYPO3-Site werden Verbindungsdaten und Core aus der Site Configuration der EXT:solr gelesen. Die API gibt keine Verbindungsdetails an Clients zurück.
 - Die Auswahl der Index Types folgt den für die jeweilige Site konfigurierten EXT:solr-Index-Queues.
-- Pro Type gilt die gemeinsame Standard-Feldliste; zusätzlich werden konfigurierte Type-Felder ausgegeben. Ein Document bleibt dem Core zugeordnet, aus dem es gelesen wurde.
+- Pro Type gilt die gemeinsame Standard-Feldliste; zusätzlich werden konfigurierte Type-Felder ausgegeben. Documents desselben Types werden unabhängig vom jeweiligen Core in einem gemeinsamen Array ausgegeben.
 
 ### Sicherheit
 - Zugriffe auf die API werden mittels API-Keys abgesichert.
@@ -99,15 +99,14 @@
 
 ### file-export
 - `GET /api/v1/file-export` liefert die zuletzt erfolgreich erzeugte Exportdatei als JSON. Der Aufruf startet keinen Export; dieser wird über den Console Command `solr-content-api:file-export` erzeugt. Der Endpoint akzeptiert keine Query-Parameter.
-- Vor der Antwort wird die Erreichbarkeit aller konfigurierten Solr-Cores geprüft. Ist mindestens ein Core nicht erreichbar, antwortet der Endpoint mit `503 Service Unavailable` und `solr_unavailable`, statt einen möglicherweise unvollständigen Datenstand auszuliefern.
-- Die Antwort enthält `exportTimestamp` und eine Liste der exportierten Cores. Jeder Eintrag enthält Site-Kennung, Core-Namen, Anzahl und Documents. Beispiel:
+- Der Endpoint liest ausschließlich die vorhandene Exportdatei. Er baut keine Verbindung zu Solr auf; eine aktuell fehlende Solr-Verbindung hat keinen Einfluss auf das Ausliefern eines bereits erzeugten Exports.
+- Wenn noch keine Exportdatei vorhanden oder die Datei nicht lesbar ist, antwortet der Endpoint mit `404 Not Found` und `file_export_unavailable`.
+- Die Antwort enthält `exportTimestamp` und das Objekt `types`. Dessen Schlüssel sind die exportierten Index Types; jeder Wert enthält `count` und `documents`. `count` entspricht der Anzahl der Einträge im jeweiligen Document-Array über alle Cores hinweg. Es gibt keine Sektion `cores`, kein globales `documents`-Array und keine Site- oder Core-Metadaten. Ein leerer Export enthält `"types": {}`. Beispiel:
   ```json
   {
     "exportTimestamp": "2026-10-16T10:00:00Z",
-    "cores": [
-      {
-        "site": "main",
-        "core": "core_de",
+    "types": {
+      "pages": {
         "count": 1,
         "documents": [
           {
@@ -122,18 +121,18 @@
           }
         ]
       }
-    ]
+    }
   }
   ```
 
 ### Fehlerverhalten
 - Fehler werden als JSON mit einem maschinenlesbaren `code` und einer verständlichen, nicht-technischen `message` zurückgegeben. Technische Details werden ausschließlich serverseitig protokolliert.
-- Beispiel für einen Solr-Ausfall:
+- Beispiel, wenn keine Exportdatei vorhanden ist:
   ```json
   {
     "error": {
-      "code": "solr_unavailable",
-      "message": "Solr ist vorübergehend nicht verfügbar."
+      "code": "file_export_unavailable",
+      "message": "Es gibt keine Exportdatei."
     }
   }
   ```
@@ -141,11 +140,10 @@
   - `400 Bad Request` (`invalid_request`): ungültige Anfrage oder Parameter.
   - `401 Unauthorized` (`unauthorized`): API-Key fehlt oder ist ungültig.
   - `404 Not Found` (`endpoint_not_found`): unbekannter API-Pfad.
-  - `404 Not Found` (`file_export_unavailable`): es wurde noch kein erfolgreicher File Export erzeugt.
+  - `404 Not Found` (`file_export_unavailable`): es gibt keine lesbare Exportdatei.
   - `405 Method Not Allowed` (`method_not_allowed`): HTTP-Methode ist nicht `GET`; der Response enthält `Allow: GET`.
-  - `503 Service Unavailable` (`solr_unavailable`): mindestens ein Solr-Core ist nicht erreichbar oder antwortet nicht rechtzeitig.
   - `500 Internal Server Error` (`internal_error`): unerwarteter interner Fehler ohne Offenlegung technischer Details.
-- Bei nicht verfügbarem Solr liefert die API eine allgemeine Meldung, dass der Dienst vorübergehend nicht verfügbar ist. Der konkrete Verbindungsfehler wird nur serverseitig protokolliert, ohne Zugangsdaten.
+- Ist Solr beim Erstellen des Exports nicht verfügbar, schlägt der Console Command fehl und die vorherige Exportdatei bleibt unverändert. Der API-Endpunkt kann diese Datei weiterhin ausliefern.
 
 ## Nicht funktionale Anforderungen
 - Es soll eine TYPO3-Extension `worlddirect/solr-content-api` erstellt werden.

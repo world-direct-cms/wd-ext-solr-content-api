@@ -14,19 +14,36 @@ use TYPO3\CMS\Core\Http\Response;
 use TYPO3\CMS\Core\Http\Stream;
 use WorldDirect\SolrContentApi\Export\ExportFileWriter;
 use WorldDirect\SolrContentApi\Service\ApiKeyVerificationService;
-use WorldDirect\SolrContentApi\Service\SolrExportService;
 
+/**
+ * Routes and authenticates API requests and serves the pre-generated Solr export.
+ */
 final class ApiMiddleware implements MiddlewareInterface
 {
     private const API_PREFIX = '/api/v1';
     private const EXPORT_PATH = '/api/v1/file-export';
+    private const ROUTES = [
+        self::EXPORT_PATH => 'handleFileExport',
+    ];
 
+    /**
+     * Initializes API authentication and error logging.
+     *
+     * @param ApiKeyVerificationService $apiKeyVerificationService Service validating the X-Api-Key header.
+     * @param LoggerInterface $logger Logger receiving authentication and export delivery errors.
+     */
     public function __construct(
         private readonly ApiKeyVerificationService $apiKeyVerificationService,
-        private readonly SolrExportService $solrExportService,
         private readonly LoggerInterface $logger,
     ) {}
 
+    /**
+     * Validates API routes, GET requests, and credentials; delegates requests outside the API prefix.
+     *
+     * @param ServerRequestInterface $request Incoming HTTP request with route and authentication headers.
+     * @param RequestHandlerInterface $handler Next handler for requests outside the API prefix.
+     * @return ResponseInterface Export response, JSON error, or the delegated handler's response.
+     */
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         $path = rtrim($request->getUri()->getPath(), '/');
@@ -37,11 +54,9 @@ final class ApiMiddleware implements MiddlewareInterface
         if ($request->getMethod() !== 'GET') {
             return $this->error(405, 'method_not_allowed', 'Nur GET-Anfragen sind erlaubt.', ['Allow' => 'GET']);
         }
-        if ($path !== self::EXPORT_PATH) {
+        $route = self::ROUTES[$path] ?? null;
+        if ($route === null) {
             return $this->error(404, 'endpoint_not_found', 'Der API-Endpunkt wurde nicht gefunden.');
-        }
-        if ($request->getQueryParams() !== []) {
-            return $this->error(400, 'invalid_request', 'Der Endpunkt akzeptiert keine Query-Parameter.');
         }
         try {
             $apiKey = $this->apiKeyVerificationService->verify($request->getHeaderLine('X-Api-Key'));
@@ -55,19 +70,23 @@ final class ApiMiddleware implements MiddlewareInterface
             return $this->error(401, 'unauthorized', 'Der API-Key fehlt oder ist ungültig.');
         }
 
-        try {
-            $solrAvailable = $this->solrExportService->areAllCoresAvailable();
-        } catch (\Throwable $exception) {
-            $this->logger->error('Solr core health check failed.', [
-                'exceptionClass' => $exception::class,
-            ]);
-            return $this->error(503, 'solr_unavailable', 'Solr ist vorübergehend nicht verfügbar.');
+        return $this->{$route}($request);
+    }
+
+    /**
+     * Serves the existing export as a non-cacheable JSON stream, rejecting query parameters.
+     *
+     * @param ServerRequestInterface $request Authenticated request checked for unsupported query parameters.
+     * @return ResponseInterface Streamed export or a JSON error if the request or file is unavailable.
+     */
+    private function handleFileExport(ServerRequestInterface $request): ResponseInterface
+    {
+        if ($request->getQueryParams() !== []) {
+            return $this->error(400, 'invalid_request', 'Der Endpunkt akzeptiert keine Query-Parameter.');
         }
-        if (!$solrAvailable) {
-            return $this->error(503, 'solr_unavailable', 'Solr ist vorübergehend nicht verfügbar.');
-        }
+
         if (!is_file(ExportFileWriter::FILE_PATH) || !is_readable(ExportFileWriter::FILE_PATH)) {
-            return $this->error(404, 'file_export_unavailable', 'Es ist noch kein File Export verfügbar.');
+            return $this->error(404, 'file_export_unavailable', 'Es gibt keine Exportdatei.');
         }
 
         try {
@@ -87,7 +106,15 @@ final class ApiMiddleware implements MiddlewareInterface
         }
     }
 
-    /** @param array<string, string> $headers */
+    /**
+     * Builds a non-cacheable JSON response using the API's error envelope.
+     *
+     * @param int $status HTTP error status code.
+     * @param string $code Machine-readable error identifier.
+     * @param string $message Human-readable error message.
+     * @param array<string, string> $headers Additional response headers, such as Allow for HTTP 405.
+     * @return JsonResponse JSON error response with caching disabled.
+     */
     private function error(int $status, string $code, string $message, array $headers = []): JsonResponse
     {
         return new JsonResponse(

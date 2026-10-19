@@ -12,6 +12,9 @@ use TYPO3\CMS\Core\Http\RequestFactory;
 use TYPO3\CMS\Core\Site\SiteFinder;
 use WorldDirect\SolrContentApi\Export\ExportFileWriter;
 
+/**
+ * Discovers site-specific Solr cores and exports configured fields using cursor pagination.
+ */
 final class SolrExportService
 {
     private const REQUIRED_FIELDS = ['type', 'uid', 'pid', 'created', 'changed', 'indexed', 'url'];
@@ -21,6 +24,14 @@ final class SolrExportService
     /** @var array{default: string[], types: array<string, string[]>} */
     private array $fieldConfiguration;
 
+    /**
+     * Initializes export dependencies and loads the configured field allowlist.
+     *
+     * @param SiteFinder $siteFinder Source of TYPO3 sites whose Solr connections are exported.
+     * @param RequestFactory $requestFactory HTTP client factory used to query Solr.
+     * @param ExportFileWriter $fileWriter Writer streaming and publishing the JSON export.
+     * @param LoggerInterface $logger Logger receiving export and core health-check failures.
+     */
     public function __construct(
         private readonly SiteFinder $siteFinder,
         private readonly RequestFactory $requestFactory,
@@ -30,6 +41,12 @@ final class SolrExportService
         $this->fieldConfiguration = require dirname(__DIR__, 2) . '/Configuration/ExportFields.php';
     }
 
+    /**
+     * Exports all configured site and language connections into a single JSON file.
+     *
+     * @return string Absolute path to the successfully published export file.
+     * @throws RuntimeException If no cores are configured or the export cannot be completed.
+     */
     public function export(): string
     {
         $connections = $this->getConnections();
@@ -47,11 +64,17 @@ final class SolrExportService
             $this->fileWriter->abort();
             $this->logger->error('Solr file export failed.', [
                 'exceptionClass' => $exception::class,
+                'exception' => $exception,
             ]);
             throw new RuntimeException('The Solr file export failed.', 0, $exception);
         }
     }
 
+    /**
+     * Checks each configured core by issuing a document query without retrieving documents.
+     *
+     * @return bool Whether at least one core is configured and every core responds successfully.
+     */
     public function areAllCoresAvailable(): bool
     {
         $connections = $this->getConnections();
@@ -80,7 +103,9 @@ final class SolrExportService
     }
 
     /**
-     * @return array<int, array{site: string, languageId: int, read: array<string, mixed>}>
+     * Collects Solr read connections for every configured TYPO3 site and language.
+     *
+     * @return array<int, array{site: string, languageId: int, read: array<string, mixed>}> Site/language connections.
      */
     private function getConnections(): array
     {
@@ -98,7 +123,13 @@ final class SolrExportService
         return $connections;
     }
 
-    /** @param array{site: string, languageId: int, read: array<string, mixed>} $connection */
+    /**
+     * Streams all documents from one connection into type groups using cursor pagination.
+     *
+     * @param array{site: string, languageId: int, read: array<string, mixed>} $connection Site, language, and Solr read settings.
+     * @throws RuntimeException If querying Solr, validating its response, or writing the export fails.
+     * @throws \JsonException If a response cannot be decoded or export data cannot be encoded.
+     */
     private function exportConnection(array $connection): void
     {
         $cursor = '*';
@@ -107,13 +138,6 @@ final class SolrExportService
         if (!is_array($response) || !isset($response['numFound']) || !is_array($response['docs'] ?? null)) {
             throw new RuntimeException('Solr returned an invalid response.');
         }
-
-        $this->fileWriter->startCore(
-            $connection['site'],
-            $connection['languageId'],
-            (string)$connection['read']['core'],
-            (int)$response['numFound']
-        );
 
         while (true) {
             foreach ($response['docs'] as $document) {
@@ -134,12 +158,13 @@ final class SolrExportService
                 throw new RuntimeException('Solr returned an invalid response.');
             }
         }
-
-        $this->fileWriter->finishCore();
     }
 
-    /** @param array<string, mixed> $document
-     *  @return array<string, mixed>
+    /**
+     * Retains required fields and configured default and type-specific fields from a document.
+     *
+     * @param array<string, mixed> $document Raw Solr document, optionally containing a multivalued type field.
+     * @return array<string, mixed> Document containing only fields allowed for its type.
      */
     private function filterDocument(array $document): array
     {
@@ -157,7 +182,16 @@ final class SolrExportService
         return array_intersect_key($document, array_fill_keys($allowedFields, true));
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Retrieves one cursor page with the union of all fields needed by the export.
+     *
+     * @param array<string, mixed> $readConfiguration Solr read endpoint settings, including optional credentials.
+     * @param string $cursor Solr cursor mark, initially * and subsequently the previous nextCursorMark.
+     * @param int $rows Maximum number of documents requested for the page.
+     * @return array<string, mixed> Decoded Solr response containing document data and cursor metadata.
+     * @throws RuntimeException If Solr returns a non-success status or a non-array JSON value.
+     * @throws \JsonException If the response body is not valid JSON.
+     */
     private function query(array $readConfiguration, string $cursor, int $rows): array
     {
         $fields = array_unique(array_merge(
@@ -177,9 +211,14 @@ final class SolrExportService
         ]);
     }
 
-    /** @param array<string, mixed> $readConfiguration
-     *  @param array<string, string> $parameters
-     *  @return array<string, mixed>
+    /**
+     * Queries a Solr select endpoint with optional Basic authentication and a fixed timeout.
+     *
+     * @param array<string, mixed> $readConfiguration Scheme, host, port, core, and optional path and credentials.
+     * @param array<string, string> $parameters Solr query parameters encoded into the request URL.
+     * @return array<string, mixed> Solr response decoded as an associative array.
+     * @throws RuntimeException If Solr returns a non-success status or a non-array JSON value.
+     * @throws \JsonException If the response body is not valid JSON.
      */
     private function request(array $readConfiguration, array $parameters): array
     {
@@ -190,7 +229,7 @@ final class SolrExportService
 
         $path = trim((string)($readConfiguration['path'] ?? ''), '/');
         $core = rawurlencode((string)$readConfiguration['core']);
-        $endpointPath = ($path === '' ? '' : '/' . $path) . '/' . $core . '/select';
+        $endpointPath = ($path === '' ? '/solr' : '/' . $path) . '/' . $core . '/select';
         $url = sprintf(
             '%s://%s:%d%s?%s',
             (string)$readConfiguration['scheme'],
