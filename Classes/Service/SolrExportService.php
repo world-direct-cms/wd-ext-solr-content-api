@@ -17,7 +17,6 @@ use WorldDirect\SolrContentApi\Export\ExportFileWriter;
  */
 final class SolrExportService
 {
-    private const REQUIRED_FIELDS = ['type', 'uid', 'pid', 'created', 'changed', 'indexed', 'url'];
     private const PAGE_SIZE = 500;
     private const REQUEST_TIMEOUT = 10;
 
@@ -161,7 +160,7 @@ final class SolrExportService
     }
 
     /**
-     * Retains required fields and configured default and type-specific fields from a document.
+    * Retains configured default and type-specific fields from a document.
      *
      * @param array<string, mixed> $document Raw Solr document, optionally containing a multivalued type field.
      * @return array<string, mixed> Document containing only fields allowed for its type.
@@ -174,7 +173,6 @@ final class SolrExportService
         }
 
         $allowedFields = array_unique(array_merge(
-            self::REQUIRED_FIELDS,
             $this->fieldConfiguration['default'] ?? [],
             $this->fieldConfiguration['types'][(string)$type] ?? [],
         ));
@@ -195,8 +193,7 @@ final class SolrExportService
     private function query(array $readConfiguration, string $cursor, int $rows): array
     {
         $fields = array_unique(array_merge(
-            self::REQUIRED_FIELDS,
-            ['id'],
+            ['id', 'type'],
             $this->fieldConfiguration['default'] ?? [],
             ...array_values($this->fieldConfiguration['types'] ?? []),
         ));

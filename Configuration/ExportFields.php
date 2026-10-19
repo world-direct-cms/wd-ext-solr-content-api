@@ -1,11 +1,11 @@
 <?php
 
 return [
-    'default' => [],
+    'default' => ['type', 'uid', 'pid', 'created', 'changed', 'indexed'],
     'types' => [
-        'pages' => ['title', 'content', 'teaser'],
-        'fe_users' => ['title', 'content'],
-        'tx_news_domain_model_news' => ['author', 'title', 'teaser', 'content', 'year_intS'],
+        'pages' => ['url', 'title', 'content', 'teaser'],
+        'fe_users' => ['url', 'title', 'content'],
+        'tx_news_domain_model_news' => ['url', 'author', 'title', 'teaser', 'content', 'year_intS'],
         'sys_file_metadata' => ['fileExtension', 'title_stringS', 'size_intS'],
     ],
 ];
