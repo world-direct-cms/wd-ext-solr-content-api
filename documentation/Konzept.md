@@ -12,11 +12,11 @@
   - [Sicherheit](#sicherheit)
   - [API-Key-Verwaltung](#api-key-verwaltung)
   - [file-export](#file-export-1)
+  - [changes](#changes)
   - [Fehlerverhalten](#fehlerverhalten)
 - [Nicht funktionale Anforderungen](#nicht-funktionale-anforderungen)
 - [Phase 2](#phase-2)
   - [API](#api-1)
-    - [changes](#changes)
     - [detail](#detail)
     - [index](#index)
 
@@ -125,6 +125,38 @@
   }
   ```
 
+### changes
+- `GET /api/v1/changes?since=2026-10-16T10:00:00Z` liefert aktuell in Solr vorhandene Documents, deren Feld `changed` groesser oder gleich `since` ist, sowie TYPO3-Datensaetze mit Soft-Delete, deren TCA-Zeitstempel `since` erreicht oder ueberschritten hat. Solr-Documents erhalten `action: "upsert"`; Soft-Deletes erhalten `action: "delete"` und mindestens `type` und `uid`.
+- `since` ist erforderlich und muss ein gueltiger ISO-8601-Zeitstempel mit Sekunden und Zeitzone sein, z. B. `2026-10-16T10:00:00Z` oder `2026-10-16T12:00:00+02:00`. Optional sind bis zu sechs Nachkommastellen erlaubt. Ein `+` im Query-Parameter muss als `%2B` URL-kodiert werden. Fuer die Solr-Abfrage wird der Wert nach UTC umgerechnet. Weitere Query-Parameter werden abgelehnt.
+- Authentifizierung und Feldkonfiguration entsprechen `file-export`. Die Antwort enthaelt Upserts mit den konfigurierten Inhalten und Delete-Eintraege mit `type`, `uid` und `action`, gruppiert unter `types` mit `count` und `documents`; sie enthaelt den uebergebenen Wert `since` statt `exportTimestamp`. Ohne Treffer lautet die Antwort `{"since":"2026-10-16T10:00:00Z","types":{}}`.
+- Beispiel:
+  ```json
+  {
+    "since": "2026-10-16T10:00:00Z",
+    "types": {
+      "pages": {
+        "count": 1,
+        "documents": [
+          {
+            "action": "upsert",
+            "type": "pages",
+            "uid": 123,
+            "pid": 1,
+            "created": "2026-10-15T08:00:00Z",
+            "changed": "2026-10-16T10:30:00Z",
+            "indexed": "2026-10-16T10:31:00Z",
+            "url": "https://example.org/beispiel",
+            "title": "Beispiel"
+          }
+        ]
+      }
+    }
+  }
+  ```
+- Fehlendes oder ungueltiges `since` sowie unbekannte Parameter ergeben `400 Bad Request` mit `invalid_request`. Nicht konfigurierte oder nicht erreichbare Solr-Cores ergeben `500 Internal Server Error` mit `internal_error`; es werden keine Teilergebnisse zurueckgegeben. Antworten sind mit `Cache-Control: no-store` versehen.
+- Soft-Deletes werden aus den TYPO3-Tabellen anhand des in der TCA definierten Delete-Felds und Zeitstempelfelds ermittelt. Der Tabellenname wird direkt aus dem Solr-Type abgeleitet; die Types muessen daher den TYPO3-Tabellennamen entsprechen. FAL-Dateilöschungen werden über TYPO3-Datei-Events erfasst: Die betroffenen `sys_file_metadata`-UIDs werden vor dem Entfernen gepuffert und nach dem Löschen dauerhaft für `changes` gespeichert. Andere Hard-Deletes, versteckte Datensaetze ohne Soft-Delete und benutzerdefinierte Ausschlussfelder wie `withdraw_date` werden nicht als Delete-Eintraege erkannt.
+- Die Methode liefert aktuelle Inhalte geaenderter Documents und Soft-Delete-Ereignisse, keine vollstaendige Aenderungshistorie; reine Neuindexierungen ohne Aenderung von `changed` werden nicht beruecksichtigt.
+
 ### Fehlerverhalten
 - Fehler werden als JSON mit einem maschinenlesbaren `code` und einer verständlichen, nicht-technischen `message` zurückgegeben. Technische Details werden ausschließlich serverseitig protokolliert.
 - Beispiel, wenn keine Exportdatei vorhanden ist:
@@ -153,12 +185,6 @@
 - Phase 2 ist aktuell nicht Teil der Umsetzung. Die folgenden Punkte sind für eine spätere Phase vorgemerkt.
 
 ### API
-
-#### changes
-- Diese Methode wird in Phase 1 nicht implementiert.
-- Sie bekommt den Parameter `since` übergeben.
-- Als Ergebnis wird eine Liste mit allen Documents zurückgegeben, welche seit dem `since`-Zeitstempel geändert wurden.
-- Die Liste enthält nur, welche Datensätze geändert wurden, nicht die eigentlichen Inhalte.
 
 #### detail
 - Diese Methode wird in Phase 1 nicht implementiert.

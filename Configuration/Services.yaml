@@ -6,3 +6,14 @@ services:
 
   WorldDirect\SolrContentApi\:
     resource: "../Classes/*"
+
+  WorldDirect\SolrContentApi\EventListener\FileDeletionListener:
+    tags:
+      - name: event.listener
+        identifier: solr-content-api-before-file-deleted
+        event: TYPO3\CMS\Core\Resource\Event\BeforeFileDeletedEvent
+        method: captureMetadataUids
+      - name: event.listener
+        identifier: solr-content-api-after-file-deleted
+        event: TYPO3\CMS\Core\Resource\Event\AfterFileDeletedEvent
+        method: persistDeletionEvents

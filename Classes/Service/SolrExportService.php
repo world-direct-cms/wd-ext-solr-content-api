@@ -8,8 +8,10 @@ use ApacheSolrForTypo3\Solr\System\Util\SiteUtility;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Http\RequestFactory;
 use TYPO3\CMS\Core\Site\SiteFinder;
+use WorldDirect\SolrContentApi\Domain\Repository\FileDeletionRepository;
 use WorldDirect\SolrContentApi\Export\ExportFileWriter;
 
 /**
@@ -27,12 +29,16 @@ final class SolrExportService
      * Initializes export dependencies and loads the configured field allowlist.
      *
      * @param SiteFinder $siteFinder Source of TYPO3 sites whose Solr connections are exported.
+     * @param ConnectionPool $connectionPool Database connection pool used to find soft-deleted records.
+     * @param FileDeletionRepository $fileDeletionRepository Source of persisted FAL file deletion events.
      * @param RequestFactory $requestFactory HTTP client factory used to query Solr.
      * @param ExportFileWriter $fileWriter Writer streaming and publishing the JSON export.
      * @param LoggerInterface $logger Logger receiving export and core health-check failures.
      */
     public function __construct(
         private readonly SiteFinder $siteFinder,
+        private readonly ConnectionPool $connectionPool,
+        private readonly FileDeletionRepository $fileDeletionRepository,
         private readonly RequestFactory $requestFactory,
         private readonly ExportFileWriter $fileWriter,
         private readonly LoggerInterface $logger,
@@ -56,7 +62,9 @@ final class SolrExportService
         $this->fileWriter->start(gmdate('Y-m-d\\TH:i:s\\Z'));
         try {
             foreach ($connections as $connection) {
-                $this->exportConnection($connection);
+                foreach ($this->getDocuments($connection) as $document) {
+                    $this->fileWriter->writeDocument($document);
+                }
             }
             return $this->fileWriter->finish();
         } catch (Throwable $exception) {
@@ -67,6 +75,107 @@ final class SolrExportService
             ]);
             throw new RuntimeException('The Solr file export failed.', 0, $exception);
         }
+    }
+
+    /**
+     * Returns changed Solr documents and TYPO3 soft-deletes at or after the validated timestamp.
+     *
+     * @param string $since Original timestamp included unchanged in the response metadata.
+     * @param \DateTimeImmutable $timestamp Validated timestamp used for the inclusive Solr filter.
+     * @return array{since: string, types: object} Upserts and deletions grouped by document type.
+     */
+    public function changes(string $since, \DateTimeImmutable $timestamp): array
+    {
+        $connections = $this->getConnections();
+        if ($connections === []) {
+            throw new RuntimeException('No Solr cores are configured.');
+        }
+
+        $solrTimestamp = $timestamp->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\\TH:i:s.u\\Z');
+        $types = [];
+        $deletedDocuments = array_merge(
+            $this->getDeletedDocuments($timestamp),
+            $this->fileDeletionRepository->findDeletedSince($timestamp)
+        );
+        $deletedKeys = [];
+        foreach ($deletedDocuments as $deletedDocument) {
+            $deletedKeys[$deletedDocument['type'] . ':' . $deletedDocument['uid']] = true;
+        }
+
+        foreach ($connections as $connection) {
+            foreach ($this->getDocuments($connection, $solrTimestamp) as $document) {
+                $type = $document['type'] ?? '';
+                if (is_array($type)) {
+                    $type = reset($type) ?: '';
+                }
+                $type = (string)$type;
+                $uid = $document['uid'] ?? null;
+                if (is_scalar($uid) && isset($deletedKeys[$type . ':' . $uid])) {
+                    continue;
+                }
+
+                $document = ['action' => 'upsert'] + $document;
+                $types[$type] ??= ['count' => 0, 'documents' => []];
+                $types[$type]['documents'][] = $document;
+                $types[$type]['count']++;
+            }
+        }
+
+        foreach ($deletedDocuments as $document) {
+            $type = $document['type'];
+            $types[$type] ??= ['count' => 0, 'documents' => []];
+            $types[$type]['documents'][] = $document;
+            $types[$type]['count']++;
+        }
+
+        return ['since' => $since, 'types' => (object)$types];
+    }
+
+    /**
+     * Loads soft-deleted TYPO3 records using each table's TCA delete and timestamp fields.
+     *
+     * @param \DateTimeImmutable $timestamp Inclusive lower bound for the table timestamp.
+     * @return array<int, array{type: string, uid: int, action: string}> Minimal deletion events.
+     */
+    private function getDeletedDocuments(\DateTimeImmutable $timestamp): array
+    {
+        $deletedDocuments = [];
+        $minimumTimestamp = $timestamp->getTimestamp();
+        if ($timestamp->format('u') !== '000000') {
+            ++$minimumTimestamp;
+        }
+
+        foreach (array_keys($this->fieldConfiguration['types'] ?? []) as $type) {
+            $table = (string)$type;
+            $ctrl = $GLOBALS['TCA'][$table]['ctrl'] ?? [];
+            $deleteField = $ctrl['delete'] ?? null;
+            $timestampField = $ctrl['tstamp'] ?? null;
+            if (!is_string($deleteField) || !is_string($timestampField)) {
+                continue;
+            }
+
+            $queryBuilder = $this->connectionPool->getQueryBuilderForTable($table);
+            $queryBuilder->getRestrictions()->removeAll();
+            $uids = $queryBuilder
+                ->select('uid')
+                ->from($table)
+                ->where(
+                    $queryBuilder->expr()->eq($deleteField, $queryBuilder->createNamedParameter(1)),
+                    $queryBuilder->expr()->gte($timestampField, $queryBuilder->createNamedParameter($minimumTimestamp))
+                )
+                ->executeQuery()
+                ->fetchFirstColumn();
+
+            foreach ($uids as $uid) {
+                $deletedDocuments[] = [
+                    'action' => 'delete',
+                    'type' => (string)$type,
+                    'uid' => (int)$uid,
+                ];
+            }
+        }
+
+        return $deletedDocuments;
     }
 
     /**
@@ -123,16 +232,18 @@ final class SolrExportService
     }
 
     /**
-     * Streams all documents from one connection into type groups using cursor pagination.
+     * Reads filtered documents from one connection using cursor pagination.
      *
      * @param array{site: string, languageId: int, read: array<string, mixed>} $connection Site, language, and Solr read settings.
+     * @param string|null $since Inclusive UTC lower bound, or null for the full export.
+     * @return \Generator<int, array<string, mixed>> Documents containing only configured export fields.
      * @throws RuntimeException If querying Solr, validating its response, or writing the export fails.
      * @throws \JsonException If a response cannot be decoded or export data cannot be encoded.
      */
-    private function exportConnection(array $connection): void
+    private function getDocuments(array $connection, ?string $since = null): \Generator
     {
         $cursor = '*';
-        $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE);
+        $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since);
         $response = $page['response'] ?? null;
         if (!is_array($response) || !isset($response['numFound']) || !is_array($response['docs'] ?? null)) {
             throw new RuntimeException('Solr returned an invalid response.');
@@ -141,7 +252,7 @@ final class SolrExportService
         while (true) {
             foreach ($response['docs'] as $document) {
                 if (is_array($document)) {
-                    $this->fileWriter->writeDocument($this->filterDocument($document));
+                    yield $this->filterDocument($document);
                 }
             }
 
@@ -151,7 +262,7 @@ final class SolrExportService
             }
 
             $cursor = $nextCursor;
-            $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE);
+            $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since);
             $response = $page['response'] ?? null;
             if (!is_array($response) || !is_array($response['docs'] ?? null)) {
                 throw new RuntimeException('Solr returned an invalid response.');
@@ -160,7 +271,7 @@ final class SolrExportService
     }
 
     /**
-    * Retains configured default and type-specific fields from a document.
+     * Retains configured default and type-specific fields from a document.
      *
      * @param array<string, mixed> $document Raw Solr document, optionally containing a multivalued type field.
      * @return array<string, mixed> Document containing only fields allowed for its type.
@@ -193,11 +304,12 @@ final class SolrExportService
      * @param array<string, mixed> $readConfiguration Solr read endpoint settings, including optional credentials.
      * @param string $cursor Solr cursor mark, initially * and subsequently the previous nextCursorMark.
      * @param int $rows Maximum number of documents requested for the page.
+     * @param string|null $since Inclusive UTC lower bound for the changed field.
      * @return array<string, mixed> Decoded Solr response containing document data and cursor metadata.
      * @throws RuntimeException If Solr returns a non-success status or a non-array JSON value.
      * @throws \JsonException If the response body is not valid JSON.
      */
-    private function query(array $readConfiguration, string $cursor, int $rows): array
+    private function query(array $readConfiguration, string $cursor, int $rows, ?string $since = null): array
     {
         $fields = array_unique(array_merge(
             ['id', 'type'],
@@ -205,14 +317,19 @@ final class SolrExportService
             ...array_values($this->fieldConfiguration['types'] ?? []),
         ));
 
-        return $this->request($readConfiguration, [
+        $parameters = [
             'q' => '*:*',
             'fl' => implode(',', $fields),
             'rows' => (string)$rows,
             'sort' => 'id asc',
             'cursorMark' => $cursor,
             'wt' => 'json',
-        ]);
+        ];
+        if ($since !== null) {
+            $parameters['fq'] = 'changed:[' . $since . ' TO *]';
+        }
+
+        return $this->request($readConfiguration, $parameters);
     }
 
     /**

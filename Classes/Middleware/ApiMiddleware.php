@@ -14,16 +14,19 @@ use TYPO3\CMS\Core\Http\Response;
 use TYPO3\CMS\Core\Http\Stream;
 use WorldDirect\SolrContentApi\Export\ExportFileWriter;
 use WorldDirect\SolrContentApi\Service\ApiKeyVerificationService;
+use WorldDirect\SolrContentApi\Service\SolrExportService;
 
 /**
- * Routes and authenticates API requests and serves the pre-generated Solr export.
+ * Routes and authenticates API requests for the pre-generated export and live changes.
  */
 final class ApiMiddleware implements MiddlewareInterface
 {
     private const API_PREFIX = '/api/v1';
-    private const EXPORT_PATH = '/api/v1/file-export';
+    private const EXPORT_PATH = self::API_PREFIX . '/file-export';
+    private const CHANGES_PATH = self::API_PREFIX . '/changes';
     private const ROUTES = [
         self::EXPORT_PATH => 'handleFileExport',
+        self::CHANGES_PATH => 'handleChanges',
     ];
 
     /**
@@ -31,10 +34,12 @@ final class ApiMiddleware implements MiddlewareInterface
      *
      * @param ApiKeyVerificationService $apiKeyVerificationService Service validating the X-Api-Key header.
      * @param LoggerInterface $logger Logger receiving authentication and export delivery errors.
+     * @param SolrExportService $solrExportService Source of live, field-filtered Solr changes.
      */
     public function __construct(
         private readonly ApiKeyVerificationService $apiKeyVerificationService,
         private readonly LoggerInterface $logger,
+        private readonly SolrExportService $solrExportService,
     ) {}
 
     /**
@@ -102,6 +107,38 @@ final class ApiMiddleware implements MiddlewareInterface
                 ->withBody(new Stream(ExportFileWriter::FILE_PATH, 'rb'));
         } catch (\Throwable $exception) {
             $this->logger->error('Solr Content API request failed.', ['exceptionClass' => $exception::class]);
+            return $this->error(500, 'internal_error', 'Die Anfrage konnte nicht verarbeitet werden.');
+        }
+    }
+
+    private function handleChanges(ServerRequestInterface $request): ResponseInterface
+    {
+        $parameters = $request->getQueryParams();
+        $since = $parameters['since'] ?? null;
+        if (
+            array_diff(array_keys($parameters), ['since']) !== []
+            || !is_string($since)
+            || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/D', $since)
+        ) {
+            return $this->error(400, 'invalid_request', 'Der Parameter since muss ein ISO-8601-Zeitstempel mit Zeitzone sein.');
+        }
+
+        $timestamp = \DateTimeImmutable::createFromFormat(
+            str_contains($since, '.') ? '!Y-m-d\\TH:i:s.uP' : '!Y-m-d\\TH:i:sP',
+            $since
+        );
+        if ($timestamp === false || \DateTimeImmutable::getLastErrors() !== false) {
+            return $this->error(400, 'invalid_request', 'Der Parameter since muss ein gueltiger ISO-8601-Zeitstempel sein.');
+        }
+
+        try {
+            return new JsonResponse(
+                $this->solrExportService->changes($since, $timestamp),
+                200,
+                ['Cache-Control' => 'no-store']
+            );
+        } catch (\Throwable $exception) {
+            $this->logger->error('Solr Content API changes request failed.', ['exceptionClass' => $exception::class]);
             return $this->error(500, 'internal_error', 'Die Anfrage konnte nicht verarbeitet werden.');
         }
     }
