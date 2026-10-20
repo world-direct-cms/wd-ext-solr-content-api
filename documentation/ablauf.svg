@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" role="img" aria-labelledby="title desc">
+  <title id="title">Inhalte über TYPO3 in Solr indexieren und über die API abfragen</title>
+  <desc id="desc">TYPO3 indexiert Inhalte in Solr. Eine externe KI fragt Solr über die solr-content-api ab und erhält Ergebnisse zurück.</desc>
+
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#315f75"/>
+    </marker>
+    <marker id="arrow-start" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto">
+      <path d="M8,0 L0,4 L8,8 Z" fill="#315f75"/>
+    </marker>
+    <style>
+      text { font-family: sans-serif; fill: #18313b; }
+      .node { stroke-width: 2; rx: 8; }
+      .label { font-size: 15px; font-weight: 600; }
+      .caption { font-size: 12px; fill: #4b626b; }
+      .flow { stroke: #315f75; stroke-width: 2.5; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="720" height="310" fill="#f6f8f7"/>
+  <text x="40" y="35" font-size="18" font-weight="700">Inhaltsindizierung und API-Abfrage</text>
+
+  <rect class="node" x="40" y="83" width="150" height="68" fill="#e4f0f3" stroke="#6393a3"/>
+  <text class="label" x="115" y="123" text-anchor="middle">TYPO3</text>
+
+  <rect class="node" x="285" y="83" width="160" height="68" fill="#e9f1e8" stroke="#789b72"/>
+  <text class="label" x="365" y="116" text-anchor="middle">Solr Server</text>
+  <text class="caption" x="365" y="136" text-anchor="middle">Suchindex</text>
+
+  <rect class="node" x="285" y="218" width="160" height="58" fill="#fff1d8" stroke="#c59a4b"/>
+  <text class="label" x="365" y="253" text-anchor="middle">solr-content-api</text>
+
+  <rect class="node" x="530" y="218" width="150" height="58" fill="#e4f0f3" stroke="#6393a3"/>
+  <text class="label" x="605" y="253" text-anchor="middle">Externe KI</text>
+
+  <path class="flow" d="M190 117 H275" marker-end="url(#arrow)"/>
+  <text class="caption" x="232" y="105" text-anchor="middle">Inhalte indexieren</text>
+
+  <path class="flow" d="M350 218 V160" marker-start="url(#arrow-start)" marker-end="url(#arrow)"/>
+  <text class="caption" x="365" y="188">Abfrage / Ergebnisse</text>
+
+  <path class="flow" d="M530 247 H455" marker-start="url(#arrow-start)" marker-end="url(#arrow)"/>
+  <text class="caption" x="492" y="235" text-anchor="middle">Anfrage / Antwort</text>
+</svg>
