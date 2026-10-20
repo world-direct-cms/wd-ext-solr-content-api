@@ -22,14 +22,14 @@ final class SolrExportService
     private const PAGE_SIZE = 500;
     private const REQUEST_TIMEOUT = 10;
 
-    /** @var array{default: string[], types: array<string, string[]>} */
+    /** @var array{default: string[], types: array<string, string[]>, withdrawalFields?: array<string, string>} */
     private array $fieldConfiguration;
 
     /**
      * Initializes export dependencies and loads the configured field allowlist.
      *
      * @param SiteFinder $siteFinder Source of TYPO3 sites whose Solr connections are exported.
-     * @param ConnectionPool $connectionPool Database connection pool used to find soft-deleted records.
+     * @param ConnectionPool $connectionPool Database connection pool used to query TYPO3 deletion fields.
      * @param FileDeletionRepository $fileDeletionRepository Source of persisted FAL file deletion events.
      * @param RequestFactory $requestFactory HTTP client factory used to query Solr.
      * @param ExportFileWriter $fileWriter Writer streaming and publishing the JSON export.
@@ -78,7 +78,7 @@ final class SolrExportService
     }
 
     /**
-     * Returns changed Solr documents and TYPO3 soft-deletes at or after the validated timestamp.
+     * Returns changed Solr documents, TYPO3 deletions, and FAL file deletions at or after the timestamp.
      *
      * @param string $since Original timestamp included unchanged in the response metadata.
      * @param \DateTimeImmutable $timestamp Validated timestamp used for the inclusive Solr filter.
@@ -132,7 +132,7 @@ final class SolrExportService
     }
 
     /**
-     * Loads soft-deleted TYPO3 records using each table's TCA delete and timestamp fields.
+     * Loads withdrawn users and TCA soft-deleted records changed at or after the requested timestamp.
      *
      * @param \DateTimeImmutable $timestamp Inclusive lower bound for the table timestamp.
      * @return array<int, array{type: string, uid: int, action: string}> Minimal deletion events.
@@ -147,22 +147,33 @@ final class SolrExportService
 
         foreach (array_keys($this->fieldConfiguration['types'] ?? []) as $type) {
             $table = (string)$type;
+            $withdrawalField = $this->fieldConfiguration['withdrawalFields'][$type] ?? null;
             $ctrl = $GLOBALS['TCA'][$table]['ctrl'] ?? [];
             $deleteField = $ctrl['delete'] ?? null;
             $timestampField = $ctrl['tstamp'] ?? null;
-            if (!is_string($deleteField) || !is_string($timestampField)) {
+
+            if (is_string($withdrawalField) && !is_string($timestampField)) {
+                continue;
+            }
+            if (!is_string($withdrawalField) && (!is_string($deleteField) || !is_string($timestampField))) {
                 continue;
             }
 
             $queryBuilder = $this->connectionPool->getQueryBuilderForTable($table);
             $queryBuilder->getRestrictions()->removeAll();
+            $conditions = is_string($withdrawalField)
+                ? [
+                    $queryBuilder->expr()->gt($withdrawalField, $queryBuilder->createNamedParameter(0)),
+                    $queryBuilder->expr()->gte($timestampField, $queryBuilder->createNamedParameter($minimumTimestamp)),
+                ]
+                : [
+                    $queryBuilder->expr()->eq($deleteField, $queryBuilder->createNamedParameter(1)),
+                    $queryBuilder->expr()->gte($timestampField, $queryBuilder->createNamedParameter($minimumTimestamp)),
+                ];
             $uids = $queryBuilder
                 ->select('uid')
                 ->from($table)
-                ->where(
-                    $queryBuilder->expr()->eq($deleteField, $queryBuilder->createNamedParameter(1)),
-                    $queryBuilder->expr()->gte($timestampField, $queryBuilder->createNamedParameter($minimumTimestamp))
-                )
+                ->where(...$conditions)
                 ->executeQuery()
                 ->fetchFirstColumn();
 

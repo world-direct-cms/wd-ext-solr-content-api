@@ -8,4 +8,7 @@ return [
         'tx_news_domain_model_news' => ['url', 'author', 'title', 'teaser', 'content', 'year_intS'],
         'sys_file_metadata' => ['fileExtension', 'title_stringS', 'size_intS', 'content', 'url'],
     ],
+    'withdrawalFields' => [
+        'fe_users' => 'withdraw_date',
+    ],
 ];
