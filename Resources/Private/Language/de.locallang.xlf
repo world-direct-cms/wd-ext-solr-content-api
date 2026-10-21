@@ -11,6 +11,9 @@
       <trans-unit id="api.file_export_unavailable"><source>No export file is available.</source><target>Es gibt keine Exportdatei.</target></trans-unit>
       <trans-unit id="api.since_format_invalid"><source>The since parameter must be an ISO 8601 timestamp with a time zone.</source><target>Der Parameter since muss ein ISO-8601-Zeitstempel mit Zeitzone sein.</target></trans-unit>
       <trans-unit id="api.since_value_invalid"><source>The since parameter must be a valid ISO 8601 timestamp.</source><target>Der Parameter since muss ein gueltiger ISO-8601-Zeitstempel sein.</target></trans-unit>
+      <trans-unit id="api.detail_parameters_invalid"><source>Specify a configured table and a positive integer UID using /api/v1/detail/{type}/{uid}.</source><target>Bitte eine konfigurierte Tabelle und eine positive ganzzahlige UID im Format /api/v1/detail/{type}/{uid} angeben.</target></trans-unit>
+      <trans-unit id="api.resource_not_found"><source>The resource was not found in the Solr index.</source><target>Die Ressource wurde im Solr-Index nicht gefunden.</target></trans-unit>
+      <trans-unit id="log.detail_failed"><source>Solr Content API detail request failed.</source><target>Die Detail-Abfrage der Solr Content API ist fehlgeschlagen.</target></trans-unit>
       <trans-unit id="log.authentication_failed"><source>Solr Content API authentication failed.</source><target>Die Authentifizierung der Solr Content API ist fehlgeschlagen.</target></trans-unit>
       <trans-unit id="log.request_failed"><source>Solr Content API request failed.</source><target>Die Anfrage an die Solr Content API ist fehlgeschlagen.</target></trans-unit>
       <trans-unit id="log.index_failed"><source>Solr Content API index request failed.</source><target>Die Index-Abfrage der Solr Content API ist fehlgeschlagen.</target></trans-unit>

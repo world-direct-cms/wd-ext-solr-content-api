@@ -119,6 +119,66 @@ final class SolrExportService
     }
 
     /**
+     * Finds one indexed resource by its configured table name and positive UID.
+     *
+     * Searches site/language cores in configuration order and returns the first match,
+     * restricted to the same default and type-specific fields as the export.
+     * Uses the Lucene parser so the core's default eDisMax parser cannot interpret filters as full text.
+     *
+     * @param string $type Table name present in the configured type allowlist.
+     * @param int $uid Positive TYPO3 record UID to match exactly in Solr.
+     * @return array<string, mixed>|null Filtered document, or null if no configured core contains it.
+     * @throws \InvalidArgumentException If the type is not configured or the UID is not positive.
+     * @throws RuntimeException If no cores are configured or Solr returns an unsuccessful or invalid response.
+     * @throws \JsonException If a Solr response cannot be decoded.
+     */
+    public function detail(string $type, int $uid): ?array
+    {
+        if (!array_key_exists($type, $this->fieldConfiguration['types']) || $uid <= 0) {
+            throw new \InvalidArgumentException(Translation::get('api.detail_parameters_invalid'));
+        }
+
+        $connections = $this->getConnections();
+        if ($connections === []) {
+            throw new RuntimeException(Translation::get('exception.no_cores'));
+        }
+
+        $fields = array_unique(array_merge(
+            ['type', 'uid'],
+            $this->fieldConfiguration['default'] ?? [],
+            $this->fieldConfiguration['types'][$type],
+        ));
+        foreach ($connections as $connection) {
+            $page = $this->request($connection['read'], [
+                'defType' => 'lucene',
+                'q' => '{!field f=type v=$documentType}',
+                'documentType' => $type,
+                'fq' => '{!field f=uid v=$documentUid}',
+                'documentUid' => (string)$uid,
+                'fl' => implode(',', $fields),
+                'rows' => '1',
+                'sort' => 'id asc',
+                'wt' => 'json',
+            ]);
+            $response = $page['response'] ?? null;
+            if (!is_array($response) || !isset($response['numFound']) || !is_array($response['docs'] ?? null)) {
+                throw new RuntimeException(Translation::get('exception.solr_response_invalid'));
+            }
+            if ($response['docs'] === []) {
+                continue;
+            }
+            $document = $response['docs'][0] ?? null;
+            if (!is_array($document)) {
+                throw new RuntimeException(Translation::get('exception.solr_response_invalid'));
+            }
+
+            return $this->filterDocument($document);
+        }
+
+        return null;
+    }
+
+    /**
      * Returns changed Solr documents, TYPO3 deletions, and FAL file deletions at or after the timestamp.
      *
      * @param string $since Original timestamp included unchanged in the response metadata.

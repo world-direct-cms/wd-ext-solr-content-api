@@ -134,6 +134,30 @@ Dateien werden im Ordner `/user_upload` abgelegt. Sämtliche sich dort befindlic
 - Soft-Deletes werden über die in der TCA konfigurierten Delete- und Zeitstempelfelder erkannt. Bei `fe_users` muss `withdraw_date` gesetzt sein; für den Abgleich mit `since` muss zusätzlich der `tstamp` des Datensatzes `since` erreichen oder überschreiten. Hard-Deletes anderer Datensätze und Ausblendungen ohne Soft-Delete werden nicht erfasst.
 
 ### detail
+- `GET /api/v1/detail/{type}/{uid}` mit dem Header `X-Api-Key: <API-Key>`; keine Query-Parameter.
+- Beispiel: `GET /api/v1/detail/tx_news_domain_model_news/234` liefert die in Solr indizierte News mit UID `234`.
+- `type` ist ein Tabellenname aus `Configuration/ExportFields.php` unter `types`. Aktuell: `pages`, `fe_users`, `tx_news_domain_model_news` und `sys_file_metadata`. Neu konfigurierte Typen werden automatisch unterstützt.
+- `uid` muss eine positive ganze Zahl ohne führende Nullen sein. Bei Dateien ist dies die UID des `sys_file_metadata`-Datensatzes, nicht die UID aus `sys_file`.
+- `document` enthält die konfigurierten Standard- und typabhängigen Exportfelder. Nicht vorhandene Solr-Felder werden ausgelassen; zusätzliche interne Felder werden nicht ausgegeben. Dateititel heißen hier wie im Export `title_stringS`.
+- Die Methode fragt Solr direkt nach Typ und UID ab und liefert den ersten Treffer in der konfigurierten Site-/Sprach-Core-Reihenfolge; innerhalb eines Cores wird nach Solr-ID sortiert. Sie erzeugt keinen Export und berücksichtigt keine noch ausstehenden Indizierungen.
+- `requestedAt` enthält den vor der Solr-Abfrage erfassten Aufrufzeitpunkt in UTC (ISO 8601). Die Antwort wird nicht gecacht (`Cache-Control: no-store`).
+- Fehler: `400 invalid_request` bei ungültigem Pfad, unbekanntem Typ, ungültiger UID oder Query-Parametern; `401 unauthorized` bei fehlendem/ungültigem API-Key; `404 resource_not_found` bei fehlendem Solr-Treffer; `405 method_not_allowed` für andere HTTP-Methoden; `500 internal_error` bei Solr-/Serverfehlern. Fehlermeldungen verwenden die Sprachlabels und das bestehende Format `{"error":{"code":"...","message":"..."}}`.
+
+Beispielantwort (vorhandene Felder abhängig vom Solr-Dokument):
+
+```json
+{
+  "requestedAt": "2026-10-21T10:00:00Z",
+  "document": {
+    "type": "tx_news_domain_model_news",
+    "uid": 234,
+    "title": "Aktuelle Nachricht",
+    "teaser": "Kurzbeschreibung der Nachricht",
+    "content": "Inhalt der Nachricht",
+    "url": "https://portal.example/news/aktuelle-nachricht"
+  }
+}
+```
 
 ### index
 - `GET /api/v1/index` mit dem Header `X-Api-Key: <API-Key>`; keine Query-Parameter.

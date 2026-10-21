@@ -18,7 +18,7 @@ use WorldDirect\SolrContentApi\Service\ApiKeyVerificationService;
 use WorldDirect\SolrContentApi\Service\SolrExportService;
 
 /**
- * Routes and authenticates API requests for the pre-generated export and live changes.
+ * Routes and authenticates API requests for exports, changes, the index, and individual resources.
  */
 final class ApiMiddleware implements MiddlewareInterface
 {
@@ -26,10 +26,12 @@ final class ApiMiddleware implements MiddlewareInterface
     private const EXPORT_PATH = self::API_PREFIX . '/file-export';
     private const CHANGES_PATH = self::API_PREFIX . '/changes';
     private const INDEX_PATH = self::API_PREFIX . '/index';
+    private const DETAIL_PATH = self::API_PREFIX . '/detail';
     private const ROUTES = [
         self::EXPORT_PATH => 'handleFileExport',
         self::CHANGES_PATH => 'handleChanges',
         self::INDEX_PATH => 'handleIndex',
+        self::DETAIL_PATH => 'handleDetail',
     ];
 
     /**
@@ -37,7 +39,7 @@ final class ApiMiddleware implements MiddlewareInterface
      *
      * @param ApiKeyVerificationService $apiKeyVerificationService Service validating the X-Api-Key header.
      * @param LoggerInterface $logger Logger receiving authentication and export delivery errors.
-     * @param SolrExportService $solrExportService Source of live, field-filtered Solr changes.
+     * @param SolrExportService $solrExportService Source of live, field-filtered Solr documents.
      */
     public function __construct(
         private readonly ApiKeyVerificationService $apiKeyVerificationService,
@@ -63,6 +65,9 @@ final class ApiMiddleware implements MiddlewareInterface
             return $this->error(405, 'method_not_allowed', 'api.method_not_allowed', ['Allow' => 'GET']);
         }
         $route = self::ROUTES[$path] ?? null;
+        if ($route === null && str_starts_with($path, self::DETAIL_PATH . '/')) {
+            $route = 'handleDetail';
+        }
         if ($route === null) {
             return $this->error(404, 'endpoint_not_found', 'api.endpoint_not_found');
         }
@@ -134,6 +139,49 @@ final class ApiMiddleware implements MiddlewareInterface
             );
         } catch (\Throwable $exception) {
             $this->logger->error(Translation::get('log.index_failed'), ['exceptionClass' => $exception::class]);
+            return $this->error(500, 'internal_error', 'api.internal_error');
+        }
+    }
+
+    /**
+     * Serves one configured resource as non-cacheable JSON, including the UTC request timestamp.
+     *
+     * Accepts /api/v1/detail/{type}/{uid} with a positive integer UID and no query parameters.
+     *
+     * @param ServerRequestInterface $request Authenticated request containing the resource path.
+     * @return ResponseInterface Single document, or a JSON error for invalid input, missing resources, or Solr failures.
+     */
+    private function handleDetail(ServerRequestInterface $request): ResponseInterface
+    {
+        $requestedAt = gmdate('Y-m-d\TH:i:s\Z');
+        if ($request->getQueryParams() !== []) {
+            return $this->error(400, 'invalid_request', 'api.query_parameters_not_allowed');
+        }
+
+        $path = rtrim($request->getUri()->getPath(), '/');
+        if (!preg_match('#^' . preg_quote(self::DETAIL_PATH, '#') . '/([^/]+)/([1-9][0-9]*)$#D', $path, $matches)) {
+            return $this->error(400, 'invalid_request', 'api.detail_parameters_invalid');
+        }
+        $uid = filter_var($matches[2], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($uid === false) {
+            return $this->error(400, 'invalid_request', 'api.detail_parameters_invalid');
+        }
+
+        try {
+            $document = $this->solrExportService->detail($matches[1], $uid);
+            if ($document === null) {
+                return $this->error(404, 'resource_not_found', 'api.resource_not_found');
+            }
+
+            return new JsonResponse(
+                ['requestedAt' => $requestedAt, 'document' => $document],
+                200,
+                ['Cache-Control' => 'no-store']
+            );
+        } catch (\InvalidArgumentException) {
+            return $this->error(400, 'invalid_request', 'api.detail_parameters_invalid');
+        } catch (\Throwable $exception) {
+            $this->logger->error(Translation::get('log.detail_failed'), ['exceptionClass' => $exception::class]);
             return $this->error(500, 'internal_error', 'api.internal_error');
         }
     }

@@ -11,6 +11,9 @@
       <trans-unit id="api.file_export_unavailable"><source>No export file is available.</source></trans-unit>
       <trans-unit id="api.since_format_invalid"><source>The since parameter must be an ISO 8601 timestamp with a time zone.</source></trans-unit>
       <trans-unit id="api.since_value_invalid"><source>The since parameter must be a valid ISO 8601 timestamp.</source></trans-unit>
+      <trans-unit id="api.detail_parameters_invalid"><source>Specify a configured table and a positive integer UID using /api/v1/detail/{type}/{uid}.</source></trans-unit>
+      <trans-unit id="api.resource_not_found"><source>The resource was not found in the Solr index.</source></trans-unit>
+      <trans-unit id="log.detail_failed"><source>Solr Content API detail request failed.</source></trans-unit>
       <trans-unit id="log.authentication_failed"><source>Solr Content API authentication failed.</source></trans-unit>
       <trans-unit id="log.request_failed"><source>Solr Content API request failed.</source></trans-unit>
       <trans-unit id="log.index_failed"><source>Solr Content API index request failed.</source></trans-unit>
