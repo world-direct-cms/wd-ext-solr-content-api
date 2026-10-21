@@ -13,6 +13,7 @@ use TYPO3\CMS\Core\Http\RequestFactory;
 use TYPO3\CMS\Core\Site\SiteFinder;
 use WorldDirect\SolrContentApi\Domain\Repository\FileDeletionRepository;
 use WorldDirect\SolrContentApi\Export\ExportFileWriter;
+use WorldDirect\SolrContentApi\Localization\Translation;
 
 /**
  * Discovers site-specific Solr cores and exports configured fields using cursor pagination.
@@ -56,7 +57,7 @@ final class SolrExportService
     {
         $connections = $this->getConnections();
         if ($connections === []) {
-            throw new RuntimeException('No Solr cores are configured.');
+            throw new RuntimeException(Translation::get('exception.no_cores'));
         }
 
         $this->fileWriter->start(gmdate('Y-m-d\\TH:i:s\\Z'));
@@ -69,12 +70,52 @@ final class SolrExportService
             return $this->fileWriter->finish();
         } catch (Throwable $exception) {
             $this->fileWriter->abort();
-            $this->logger->error('Solr file export failed.', [
+            $this->logger->error(Translation::get('log.export_failed'), [
                 'exceptionClass' => $exception::class,
                 'exception' => $exception,
             ]);
-            throw new RuntimeException('The Solr file export failed.', 0, $exception);
+            throw new RuntimeException(Translation::get('exception.export_failed'), 0, $exception);
         }
+    }
+
+    /**
+     * Returns all currently indexed documents with only type, uid, and title.
+     *
+     * Reads every configured site/language core without deduplicating documents between cores.
+     * Uses title_stringS as a fallback for file titles and an empty string when no title is available.
+     * Captures requestedAt in UTC before querying Solr.
+     *
+     * @return array{requestedAt: string, types: object} Request timestamp and minimal documents grouped by type.
+     * @throws RuntimeException If no cores are configured or Solr returns an unsuccessful or invalid response.
+     * @throws \JsonException If a Solr response cannot be decoded.
+     */
+    public function index(): array
+    {
+        $requestedAt = gmdate('Y-m-d\TH:i:s\Z');
+        $connections = $this->getConnections();
+        if ($connections === []) {
+            throw new RuntimeException(Translation::get('exception.no_cores'));
+        }
+
+        $types = [];
+        foreach ($connections as $connection) {
+            foreach ($this->getDocuments($connection, null, ['type', 'uid', 'title', 'title_stringS']) as $document) {
+                $type = $document['type'] ?? '';
+                if (is_array($type)) {
+                    $type = reset($type) ?: '';
+                }
+                $type = (string)$type;
+                $types[$type] ??= ['count' => 0, 'documents' => []];
+                $types[$type]['documents'][] = [
+                    'type' => $type,
+                    'uid' => $document['uid'] ?? null,
+                    'title' => $document['title'] ?? $document['title_stringS'] ?? '',
+                ];
+                $types[$type]['count']++;
+            }
+        }
+
+        return ['requestedAt' => $requestedAt, 'types' => (object)$types];
     }
 
     /**
@@ -88,7 +129,7 @@ final class SolrExportService
     {
         $connections = $this->getConnections();
         if ($connections === []) {
-            throw new RuntimeException('No Solr cores are configured.');
+            throw new RuntimeException(Translation::get('exception.no_cores'));
         }
 
         $solrTimestamp = $timestamp->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\\TH:i:s.u\\Z');
@@ -209,7 +250,7 @@ final class SolrExportService
                     'wt' => 'json',
                 ]);
             } catch (Throwable $exception) {
-                $this->logger->error('Solr core health check failed.', [
+                $this->logger->error(Translation::get('log.core_unavailable'), [
                     'site' => $connection['site'],
                     'core' => (string)$connection['read']['core'],
                     'exceptionClass' => $exception::class,
@@ -247,23 +288,26 @@ final class SolrExportService
      *
      * @param array{site: string, languageId: int, read: array<string, mixed>} $connection Site, language, and Solr read settings.
      * @param string|null $since Inclusive UTC lower bound, or null for the full export.
-     * @return \Generator<int, array<string, mixed>> Documents containing only configured export fields.
+     * @param string[]|null $fields Explicit fields to retrieve instead of the configured export fields.
+     * @return \Generator<int, array<string, mixed>> Documents containing only the selected fields.
      * @throws RuntimeException If querying Solr, validating its response, or writing the export fails.
      * @throws \JsonException If a response cannot be decoded or export data cannot be encoded.
      */
-    private function getDocuments(array $connection, ?string $since = null): \Generator
+    private function getDocuments(array $connection, ?string $since = null, ?array $fields = null): \Generator
     {
         $cursor = '*';
-        $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since);
+        $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since, $fields);
         $response = $page['response'] ?? null;
         if (!is_array($response) || !isset($response['numFound']) || !is_array($response['docs'] ?? null)) {
-            throw new RuntimeException('Solr returned an invalid response.');
+            throw new RuntimeException(Translation::get('exception.solr_response_invalid'));
         }
 
         while (true) {
             foreach ($response['docs'] as $document) {
                 if (is_array($document)) {
-                    yield $this->filterDocument($document);
+                    yield $fields === null
+                        ? $this->filterDocument($document)
+                        : array_intersect_key($document, array_flip($fields));
                 }
             }
 
@@ -273,10 +317,10 @@ final class SolrExportService
             }
 
             $cursor = $nextCursor;
-            $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since);
+            $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since, $fields);
             $response = $page['response'] ?? null;
             if (!is_array($response) || !is_array($response['docs'] ?? null)) {
-                throw new RuntimeException('Solr returned an invalid response.');
+                throw new RuntimeException(Translation::get('exception.solr_response_invalid'));
             }
         }
     }
@@ -316,13 +360,14 @@ final class SolrExportService
      * @param string $cursor Solr cursor mark, initially * and subsequently the previous nextCursorMark.
      * @param int $rows Maximum number of documents requested for the page.
      * @param string|null $since Inclusive UTC lower bound for the changed field.
+     * @param string[]|null $fields Explicit fields to retrieve instead of the configured export fields.
      * @return array<string, mixed> Decoded Solr response containing document data and cursor metadata.
      * @throws RuntimeException If Solr returns a non-success status or a non-array JSON value.
      * @throws \JsonException If the response body is not valid JSON.
      */
-    private function query(array $readConfiguration, string $cursor, int $rows, ?string $since = null): array
+    private function query(array $readConfiguration, string $cursor, int $rows, ?string $since = null, ?array $fields = null): array
     {
-        $fields = array_unique(array_merge(
+        $fields ??= array_unique(array_merge(
             ['id', 'type'],
             $this->fieldConfiguration['default'] ?? [],
             ...array_values($this->fieldConfiguration['types'] ?? []),
@@ -382,12 +427,12 @@ final class SolrExportService
             'timeout' => self::REQUEST_TIMEOUT,
         ]);
         if ($response->getStatusCode() !== 200) {
-            throw new RuntimeException('Solr returned a non-success status.');
+            throw new RuntimeException(Translation::get('exception.solr_status_invalid'));
         }
 
         $data = json_decode((string)$response->getBody(), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($data)) {
-            throw new RuntimeException('Solr returned invalid JSON.');
+            throw new RuntimeException(Translation::get('exception.solr_json_invalid'));
         }
 
         return $data;

@@ -10,14 +10,14 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Throwable;
+use WorldDirect\SolrContentApi\Localization\Translation;
 use WorldDirect\SolrContentApi\Service\SolrExportService;
 
 /**
  * Generates the Solr JSON export through the TYPO3 command-line interface.
  */
 #[AsCommand(
-    name: 'solr-content-api:file-export',
-    description: 'Solr Content API - File Export'
+    name: 'solr-content-api:file-export'
 )]
 final class FileExportCommand extends Command
 {
@@ -29,6 +29,7 @@ final class FileExportCommand extends Command
     public function __construct(private readonly SolrExportService $solrExportService)
     {
         parent::__construct();
+        $this->setDescription(Translation::get('command.description'));
     }
 
     /**
@@ -44,11 +45,11 @@ final class FileExportCommand extends Command
         try {
             $path = $this->solrExportService->export();
         } catch (Throwable) {
-            $io->error('File export failed. Check the TYPO3 log for details.');
+            $io->error(Translation::get('command.failed'));
             return Command::FAILURE;
         }
 
-        $io->success(sprintf('Solr Content API - File Export written to "%s".', $path));
+        $io->success(Translation::get('command.success', arguments: [$path]));
         return Command::SUCCESS;
     }
 }

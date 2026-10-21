@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WorldDirect\SolrContentApi\Export;
 
 use RuntimeException;
+use WorldDirect\SolrContentApi\Localization\Translation;
 
 /**
  * Streams a JSON export to a temporary file and atomically publishes it on completion.
@@ -31,24 +32,24 @@ final class ExportFileWriter
     {
         $directory = dirname(self::FILE_PATH);
         if (!is_dir($directory) && !mkdir($directory, 0770, true) && !is_dir($directory)) {
-            throw new RuntimeException('Could not create the export directory.');
+            throw new RuntimeException(Translation::get('exception.export_directory'));
         }
 
         $this->temporaryPath = tempnam($directory, '.solr-content-api-');
         if ($this->temporaryPath === false) {
             $this->temporaryPath = null;
-            throw new RuntimeException('Could not create a temporary export file.');
+            throw new RuntimeException(Translation::get('exception.temporary_file_create'));
         }
 
         if (!chmod($this->temporaryPath, 0640)) {
             $this->abort();
-            throw new RuntimeException('Could not set permissions on the temporary export file.');
+            throw new RuntimeException(Translation::get('exception.temporary_file_permissions'));
         }
 
         $this->stream = fopen($this->temporaryPath, 'wb');
         if ($this->stream === false) {
             $this->abort();
-            throw new RuntimeException('Could not open the temporary export file.');
+            throw new RuntimeException(Translation::get('exception.temporary_file_open'));
         }
 
         $this->write('{"exportTimestamp":' . $this->encode($exportTimestamp) . ',"types":{');
@@ -72,7 +73,7 @@ final class ExportFileWriter
         if (!isset($this->typeStreams[$type])) {
             $stream = tmpfile();
             if ($stream === false) {
-                throw new RuntimeException('Could not create a temporary type stream.');
+                throw new RuntimeException(Translation::get('exception.type_stream_create'));
             }
             $this->typeStreams[$type] = $stream;
             $this->typeCounts[$type] = 0;
@@ -81,7 +82,7 @@ final class ExportFileWriter
         $stream = $this->typeStreams[$type];
         $content = (ftell($stream) > 0 ? ',' : '') . $this->encode($document);
         if (fwrite($stream, $content) !== strlen($content)) {
-            throw new RuntimeException('Could not write a document to the temporary type stream.');
+            throw new RuntimeException(Translation::get('exception.type_stream_write'));
         }
         $this->typeCounts[$type]++;
     }
@@ -100,7 +101,7 @@ final class ExportFileWriter
                 . ':{"count":' . $this->typeCounts[$type] . ',"documents":[');
             $firstType = false;
             if (!rewind($stream) || stream_copy_to_stream($stream, $this->stream) === false) {
-                throw new RuntimeException('Could not copy documents to the export file.');
+                throw new RuntimeException(Translation::get('exception.documents_copy'));
             }
             $this->write(']}');
             fclose($stream);
@@ -111,13 +112,13 @@ final class ExportFileWriter
         if (!fclose($this->stream)) {
             $this->stream = null;
             $this->abort();
-            throw new RuntimeException('Could not close the export file.');
+            throw new RuntimeException(Translation::get('exception.export_file_close'));
         }
         $this->stream = null;
 
         if ($this->temporaryPath === null || !rename($this->temporaryPath, self::FILE_PATH)) {
             $this->abort();
-            throw new RuntimeException('Could not replace the export file.');
+            throw new RuntimeException(Translation::get('exception.export_file_replace'));
         }
 
         $this->temporaryPath = null;
@@ -155,7 +156,7 @@ final class ExportFileWriter
     private function write(string $content): void
     {
         if (!is_resource($this->stream) || fwrite($this->stream, $content) === false) {
-            throw new RuntimeException('Could not write the export file.');
+            throw new RuntimeException(Translation::get('exception.export_file_write'));
         }
     }
 

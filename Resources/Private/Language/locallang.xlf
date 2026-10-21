@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.0">
+  <file source-language="en" datatype="plaintext" original="messages">
+    <header />
+    <body>
+      <trans-unit id="api.method_not_allowed"><source>Only GET requests are allowed.</source></trans-unit>
+      <trans-unit id="api.endpoint_not_found"><source>The API endpoint was not found.</source></trans-unit>
+      <trans-unit id="api.internal_error"><source>The request could not be processed.</source></trans-unit>
+      <trans-unit id="api.unauthorized"><source>The API key is missing or invalid.</source></trans-unit>
+      <trans-unit id="api.query_parameters_not_allowed"><source>The endpoint does not accept query parameters.</source></trans-unit>
+      <trans-unit id="api.file_export_unavailable"><source>No export file is available.</source></trans-unit>
+      <trans-unit id="api.since_format_invalid"><source>The since parameter must be an ISO 8601 timestamp with a time zone.</source></trans-unit>
+      <trans-unit id="api.since_value_invalid"><source>The since parameter must be a valid ISO 8601 timestamp.</source></trans-unit>
+      <trans-unit id="log.authentication_failed"><source>Solr Content API authentication failed.</source></trans-unit>
+      <trans-unit id="log.request_failed"><source>Solr Content API request failed.</source></trans-unit>
+      <trans-unit id="log.index_failed"><source>Solr Content API index request failed.</source></trans-unit>
+      <trans-unit id="log.changes_failed"><source>Solr Content API changes request failed.</source></trans-unit>
+      <trans-unit id="log.export_failed"><source>Solr file export failed.</source></trans-unit>
+      <trans-unit id="log.core_unavailable"><source>Solr core health check failed.</source></trans-unit>
+      <trans-unit id="exception.export_file_size"><source>Could not determine export file size.</source></trans-unit>
+      <trans-unit id="exception.no_cores"><source>No Solr cores are configured.</source></trans-unit>
+      <trans-unit id="exception.export_failed"><source>The Solr file export failed.</source></trans-unit>
+      <trans-unit id="exception.solr_response_invalid"><source>Solr returned an invalid response.</source></trans-unit>
+      <trans-unit id="exception.solr_status_invalid"><source>Solr returned a non-success status.</source></trans-unit>
+      <trans-unit id="exception.solr_json_invalid"><source>Solr returned invalid JSON.</source></trans-unit>
+      <trans-unit id="exception.export_directory"><source>Could not create the export directory.</source></trans-unit>
+      <trans-unit id="exception.temporary_file_create"><source>Could not create a temporary export file.</source></trans-unit>
+      <trans-unit id="exception.temporary_file_permissions"><source>Could not set permissions on the temporary export file.</source></trans-unit>
+      <trans-unit id="exception.temporary_file_open"><source>Could not open the temporary export file.</source></trans-unit>
+      <trans-unit id="exception.type_stream_create"><source>Could not create a temporary type stream.</source></trans-unit>
+      <trans-unit id="exception.type_stream_write"><source>Could not write a document to the temporary type stream.</source></trans-unit>
+      <trans-unit id="exception.documents_copy"><source>Could not copy documents to the export file.</source></trans-unit>
+      <trans-unit id="exception.export_file_close"><source>Could not close the export file.</source></trans-unit>
+      <trans-unit id="exception.export_file_replace"><source>Could not replace the export file.</source></trans-unit>
+      <trans-unit id="exception.export_file_write"><source>Could not write the export file.</source></trans-unit>
+      <trans-unit id="command.description"><source>Solr Content API - File Export</source></trans-unit>
+      <trans-unit id="command.failed"><source>File export failed. Check the TYPO3 log for details.</source></trans-unit>
+      <trans-unit id="command.success"><source>Solr Content API - File Export written to "%s".</source></trans-unit>
+    </body>
+  </file>
+</xliff>

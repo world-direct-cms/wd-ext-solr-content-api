@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.0">
+  <file source-language="en" target-language="de" datatype="plaintext" original="messages">
+    <header />
+    <body>
+      <trans-unit id="api.method_not_allowed"><source>Only GET requests are allowed.</source><target>Nur GET-Anfragen sind erlaubt.</target></trans-unit>
+      <trans-unit id="api.endpoint_not_found"><source>The API endpoint was not found.</source><target>Der API-Endpunkt wurde nicht gefunden.</target></trans-unit>
+      <trans-unit id="api.internal_error"><source>The request could not be processed.</source><target>Die Anfrage konnte nicht verarbeitet werden.</target></trans-unit>
+      <trans-unit id="api.unauthorized"><source>The API key is missing or invalid.</source><target>Der API-Key fehlt oder ist ungültig.</target></trans-unit>
+      <trans-unit id="api.query_parameters_not_allowed"><source>The endpoint does not accept query parameters.</source><target>Der Endpunkt akzeptiert keine Query-Parameter.</target></trans-unit>
+      <trans-unit id="api.file_export_unavailable"><source>No export file is available.</source><target>Es gibt keine Exportdatei.</target></trans-unit>
+      <trans-unit id="api.since_format_invalid"><source>The since parameter must be an ISO 8601 timestamp with a time zone.</source><target>Der Parameter since muss ein ISO-8601-Zeitstempel mit Zeitzone sein.</target></trans-unit>
+      <trans-unit id="api.since_value_invalid"><source>The since parameter must be a valid ISO 8601 timestamp.</source><target>Der Parameter since muss ein gueltiger ISO-8601-Zeitstempel sein.</target></trans-unit>
+      <trans-unit id="log.authentication_failed"><source>Solr Content API authentication failed.</source><target>Die Authentifizierung der Solr Content API ist fehlgeschlagen.</target></trans-unit>
+      <trans-unit id="log.request_failed"><source>Solr Content API request failed.</source><target>Die Anfrage an die Solr Content API ist fehlgeschlagen.</target></trans-unit>
+      <trans-unit id="log.index_failed"><source>Solr Content API index request failed.</source><target>Die Index-Abfrage der Solr Content API ist fehlgeschlagen.</target></trans-unit>
+      <trans-unit id="log.changes_failed"><source>Solr Content API changes request failed.</source><target>Die Changes-Abfrage der Solr Content API ist fehlgeschlagen.</target></trans-unit>
+      <trans-unit id="log.export_failed"><source>Solr file export failed.</source><target>Der Solr-Dateiexport ist fehlgeschlagen.</target></trans-unit>
+      <trans-unit id="log.core_unavailable"><source>Solr core health check failed.</source><target>Die Verfügbarkeitsprüfung eines Solr-Cores ist fehlgeschlagen.</target></trans-unit>
+      <trans-unit id="exception.export_file_size"><source>Could not determine export file size.</source><target>Die Größe der Exportdatei konnte nicht ermittelt werden.</target></trans-unit>
+      <trans-unit id="exception.no_cores"><source>No Solr cores are configured.</source><target>Es sind keine Solr-Cores konfiguriert.</target></trans-unit>
+      <trans-unit id="exception.export_failed"><source>The Solr file export failed.</source><target>Der Solr-Dateiexport ist fehlgeschlagen.</target></trans-unit>
+      <trans-unit id="exception.solr_response_invalid"><source>Solr returned an invalid response.</source><target>Solr hat eine ungültige Antwort geliefert.</target></trans-unit>
+      <trans-unit id="exception.solr_status_invalid"><source>Solr returned a non-success status.</source><target>Solr hat einen nicht erfolgreichen HTTP-Status geliefert.</target></trans-unit>
+      <trans-unit id="exception.solr_json_invalid"><source>Solr returned invalid JSON.</source><target>Solr hat ungültiges JSON geliefert.</target></trans-unit>
+      <trans-unit id="exception.export_directory"><source>Could not create the export directory.</source><target>Das Exportverzeichnis konnte nicht erstellt werden.</target></trans-unit>
+      <trans-unit id="exception.temporary_file_create"><source>Could not create a temporary export file.</source><target>Eine temporäre Exportdatei konnte nicht erstellt werden.</target></trans-unit>
+      <trans-unit id="exception.temporary_file_permissions"><source>Could not set permissions on the temporary export file.</source><target>Die Berechtigungen der temporären Exportdatei konnten nicht gesetzt werden.</target></trans-unit>
+      <trans-unit id="exception.temporary_file_open"><source>Could not open the temporary export file.</source><target>Die temporäre Exportdatei konnte nicht geöffnet werden.</target></trans-unit>
+      <trans-unit id="exception.type_stream_create"><source>Could not create a temporary type stream.</source><target>Ein temporärer Stream für den Dokumenttyp konnte nicht erstellt werden.</target></trans-unit>
+      <trans-unit id="exception.type_stream_write"><source>Could not write a document to the temporary type stream.</source><target>Ein Dokument konnte nicht in den temporären Stream geschrieben werden.</target></trans-unit>
+      <trans-unit id="exception.documents_copy"><source>Could not copy documents to the export file.</source><target>Die Dokumente konnten nicht in die Exportdatei kopiert werden.</target></trans-unit>
+      <trans-unit id="exception.export_file_close"><source>Could not close the export file.</source><target>Die Exportdatei konnte nicht geschlossen werden.</target></trans-unit>
+      <trans-unit id="exception.export_file_replace"><source>Could not replace the export file.</source><target>Die Exportdatei konnte nicht ersetzt werden.</target></trans-unit>
+      <trans-unit id="exception.export_file_write"><source>Could not write the export file.</source><target>Die Exportdatei konnte nicht geschrieben werden.</target></trans-unit>
+      <trans-unit id="command.description"><source>Solr Content API - File Export</source><target>Solr Content API - Dateiexport</target></trans-unit>
+      <trans-unit id="command.failed"><source>File export failed. Check the TYPO3 log for details.</source><target>Der Dateiexport ist fehlgeschlagen. Details stehen im TYPO3-Log.</target></trans-unit>
+      <trans-unit id="command.success"><source>Solr Content API - File Export written to "%s".</source><target>Solr Content API - Dateiexport wurde nach "%s" geschrieben.</target></trans-unit>
+    </body>
+  </file>
+</xliff>

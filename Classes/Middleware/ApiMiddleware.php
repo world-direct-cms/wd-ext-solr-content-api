@@ -13,6 +13,7 @@ use TYPO3\CMS\Core\Http\JsonResponse;
 use TYPO3\CMS\Core\Http\Response;
 use TYPO3\CMS\Core\Http\Stream;
 use WorldDirect\SolrContentApi\Export\ExportFileWriter;
+use WorldDirect\SolrContentApi\Localization\Translation;
 use WorldDirect\SolrContentApi\Service\ApiKeyVerificationService;
 use WorldDirect\SolrContentApi\Service\SolrExportService;
 
@@ -24,9 +25,11 @@ final class ApiMiddleware implements MiddlewareInterface
     private const API_PREFIX = '/api/v1';
     private const EXPORT_PATH = self::API_PREFIX . '/file-export';
     private const CHANGES_PATH = self::API_PREFIX . '/changes';
+    private const INDEX_PATH = self::API_PREFIX . '/index';
     private const ROUTES = [
         self::EXPORT_PATH => 'handleFileExport',
         self::CHANGES_PATH => 'handleChanges',
+        self::INDEX_PATH => 'handleIndex',
     ];
 
     /**
@@ -57,22 +60,22 @@ final class ApiMiddleware implements MiddlewareInterface
         }
 
         if ($request->getMethod() !== 'GET') {
-            return $this->error(405, 'method_not_allowed', 'Nur GET-Anfragen sind erlaubt.', ['Allow' => 'GET']);
+            return $this->error(405, 'method_not_allowed', 'api.method_not_allowed', ['Allow' => 'GET']);
         }
         $route = self::ROUTES[$path] ?? null;
         if ($route === null) {
-            return $this->error(404, 'endpoint_not_found', 'Der API-Endpunkt wurde nicht gefunden.');
+            return $this->error(404, 'endpoint_not_found', 'api.endpoint_not_found');
         }
         try {
             $apiKey = $this->apiKeyVerificationService->verify($request->getHeaderLine('X-Api-Key'));
         } catch (\Throwable $exception) {
-            $this->logger->error('Solr Content API authentication failed.', [
+            $this->logger->error(Translation::get('log.authentication_failed'), [
                 'exceptionClass' => $exception::class,
             ]);
-            return $this->error(500, 'internal_error', 'Die Anfrage konnte nicht verarbeitet werden.');
+            return $this->error(500, 'internal_error', 'api.internal_error');
         }
         if ($apiKey === null) {
-            return $this->error(401, 'unauthorized', 'Der API-Key fehlt oder ist ungültig.');
+            return $this->error(401, 'unauthorized', 'api.unauthorized');
         }
 
         return $this->{$route}($request);
@@ -87,17 +90,17 @@ final class ApiMiddleware implements MiddlewareInterface
     private function handleFileExport(ServerRequestInterface $request): ResponseInterface
     {
         if ($request->getQueryParams() !== []) {
-            return $this->error(400, 'invalid_request', 'Der Endpunkt akzeptiert keine Query-Parameter.');
+            return $this->error(400, 'invalid_request', 'api.query_parameters_not_allowed');
         }
 
         if (!is_file(ExportFileWriter::FILE_PATH) || !is_readable(ExportFileWriter::FILE_PATH)) {
-            return $this->error(404, 'file_export_unavailable', 'Es gibt keine Exportdatei.');
+            return $this->error(404, 'file_export_unavailable', 'api.file_export_unavailable');
         }
 
         try {
             $size = filesize(ExportFileWriter::FILE_PATH);
             if ($size === false) {
-                throw new \RuntimeException('Could not determine export file size.');
+                throw new \RuntimeException(Translation::get('exception.export_file_size'));
             }
             return (new Response())
                 ->withStatus(200)
@@ -106,8 +109,32 @@ final class ApiMiddleware implements MiddlewareInterface
                 ->withHeader('Cache-Control', 'no-store')
                 ->withBody(new Stream(ExportFileWriter::FILE_PATH, 'rb'));
         } catch (\Throwable $exception) {
-            $this->logger->error('Solr Content API request failed.', ['exceptionClass' => $exception::class]);
-            return $this->error(500, 'internal_error', 'Die Anfrage konnte nicht verarbeitet werden.');
+            $this->logger->error(Translation::get('log.request_failed'), ['exceptionClass' => $exception::class]);
+            return $this->error(500, 'internal_error', 'api.internal_error');
+        }
+    }
+
+    /**
+     * Serves the current minimal Solr index as non-cacheable JSON, rejecting query parameters.
+     *
+     * @param ServerRequestInterface $request Authenticated request checked for unsupported query parameters.
+     * @return ResponseInterface Index grouped by type, or a JSON error for invalid parameters or retrieval failures.
+     */
+    private function handleIndex(ServerRequestInterface $request): ResponseInterface
+    {
+        if ($request->getQueryParams() !== []) {
+            return $this->error(400, 'invalid_request', 'api.query_parameters_not_allowed');
+        }
+
+        try {
+            return new JsonResponse(
+                $this->solrExportService->index(),
+                200,
+                ['Cache-Control' => 'no-store']
+            );
+        } catch (\Throwable $exception) {
+            $this->logger->error(Translation::get('log.index_failed'), ['exceptionClass' => $exception::class]);
+            return $this->error(500, 'internal_error', 'api.internal_error');
         }
     }
 
@@ -120,7 +147,7 @@ final class ApiMiddleware implements MiddlewareInterface
             || !is_string($since)
             || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/D', $since)
         ) {
-            return $this->error(400, 'invalid_request', 'Der Parameter since muss ein ISO-8601-Zeitstempel mit Zeitzone sein.');
+            return $this->error(400, 'invalid_request', 'api.since_format_invalid');
         }
 
         $timestamp = \DateTimeImmutable::createFromFormat(
@@ -128,7 +155,7 @@ final class ApiMiddleware implements MiddlewareInterface
             $since
         );
         if ($timestamp === false || \DateTimeImmutable::getLastErrors() !== false) {
-            return $this->error(400, 'invalid_request', 'Der Parameter since muss ein gueltiger ISO-8601-Zeitstempel sein.');
+            return $this->error(400, 'invalid_request', 'api.since_value_invalid');
         }
 
         try {
@@ -138,8 +165,8 @@ final class ApiMiddleware implements MiddlewareInterface
                 ['Cache-Control' => 'no-store']
             );
         } catch (\Throwable $exception) {
-            $this->logger->error('Solr Content API changes request failed.', ['exceptionClass' => $exception::class]);
-            return $this->error(500, 'internal_error', 'Die Anfrage konnte nicht verarbeitet werden.');
+            $this->logger->error(Translation::get('log.changes_failed'), ['exceptionClass' => $exception::class]);
+            return $this->error(500, 'internal_error', 'api.internal_error');
         }
     }
 
@@ -148,14 +175,14 @@ final class ApiMiddleware implements MiddlewareInterface
      *
      * @param int $status HTTP error status code.
      * @param string $code Machine-readable error identifier.
-     * @param string $message Human-readable error message.
+     * @param string $messageKey Translation key for the German API error message.
      * @param array<string, string> $headers Additional response headers, such as Allow for HTTP 405.
      * @return JsonResponse JSON error response with caching disabled.
      */
-    private function error(int $status, string $code, string $message, array $headers = []): JsonResponse
+    private function error(int $status, string $code, string $messageKey, array $headers = []): JsonResponse
     {
         return new JsonResponse(
-            ['error' => ['code' => $code, 'message' => $message]],
+            ['error' => ['code' => $code, 'message' => Translation::get($messageKey, 'de')]],
             $status,
             ['Cache-Control' => 'no-store'] + $headers
         );
