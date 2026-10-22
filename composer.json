@@ -3,6 +3,19 @@
   "type": "typo3-cms-extension",
   "description": "Solr-backed file export API for TYPO3.",
   "license": "GPL-2.0-or-later",
+  "keywords": [
+    "solr",
+    "api",
+    "export"
+  ],
+  "authors": [
+    {
+      "name": "Klaus Hörman-Engl",
+      "email": "kho@world-direct.at",
+      "homepage": "https://www.world-direct.at",
+      "role": "Developer"
+    }
+  ],
   "require": {
     "php": "^8.1",
     "typo3/cms-core": "^12.4 || ^13.4",
