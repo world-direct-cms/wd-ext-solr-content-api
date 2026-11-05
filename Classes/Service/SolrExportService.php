@@ -22,6 +22,9 @@ final class SolrExportService
 {
     private const PAGE_SIZE = 500;
     private const REQUEST_TIMEOUT = 10;
+    // EXT:solr marks unrestricted documents with access "c:0" (pages) or "r:0" (records); everything else carries fe_group restrictions.
+    private const PUBLIC_ACCESS_FILTER = '-access:[* TO "c:0"} -access:{"c:0" TO "r:0"} -access:{"r:0" TO *]';
+    private const PROTECTED_ACCESS_FILTER = '+(access:[* TO "c:0"} access:{"c:0" TO "r:0"} access:{"r:0" TO *])';
 
     /** @var array{default: string[], types: array<string, string[]>, withdrawalFields?: array<string, string>, fieldAliases?: array<string, string>} */
     private array $fieldConfiguration;
@@ -153,8 +156,7 @@ final class SolrExportService
                 'defType' => 'lucene',
                 'q' => '{!field f=type v=$documentType}',
                 'documentType' => $type,
-                'fq' => '{!field f=uid v=$documentUid}',
-                'documentUid' => (string)$uid,
+                'fq' => '+uid:' . $uid . ' ' . self::PUBLIC_ACCESS_FILTER,
                 'fl' => implode(',', $fields),
                 'rows' => '1',
                 'sort' => 'id asc',
@@ -219,6 +221,26 @@ final class SolrExportService
                 $types[$type] ??= ['count' => 0, 'documents' => []];
                 $types[$type]['documents'][] = $document;
                 $types[$type]['count']++;
+                if (is_scalar($uid)) {
+                    $deletedKeys[$type . ':' . $uid] = true;
+                }
+            }
+        }
+
+        // Documents that became access-restricted must be removed by API consumers.
+        foreach ($connections as $connection) {
+            foreach ($this->getDocuments($connection, $solrTimestamp, ['type', 'uid'], true) as $document) {
+                $type = $document['type'] ?? '';
+                if (is_array($type)) {
+                    $type = reset($type) ?: '';
+                }
+                $type = (string)$type;
+                $uid = $document['uid'] ?? null;
+                if (!is_scalar($uid) || isset($deletedKeys[$type . ':' . $uid])) {
+                    continue;
+                }
+                $deletedKeys[$type . ':' . $uid] = true;
+                $deletedDocuments[] = ['action' => 'delete', 'type' => $type, 'uid' => (int)$uid];
             }
         }
 
@@ -349,14 +371,15 @@ final class SolrExportService
      * @param array{site: string, languageId: int, read: array<string, mixed>} $connection Site, language, and Solr read settings.
      * @param string|null $since Inclusive UTC lower bound, or null for the full export.
      * @param string[]|null $fields Explicit fields to retrieve instead of the configured export fields.
+     * @param bool $protected Whether to read only access-restricted documents instead of public ones.
      * @return \Generator<int, array<string, mixed>> Documents containing only the selected fields.
      * @throws RuntimeException If querying Solr, validating its response, or writing the export fails.
      * @throws \JsonException If a response cannot be decoded or export data cannot be encoded.
      */
-    private function getDocuments(array $connection, ?string $since = null, ?array $fields = null): \Generator
+    private function getDocuments(array $connection, ?string $since = null, ?array $fields = null, bool $protected = false): \Generator
     {
         $cursor = '*';
-        $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since, $fields);
+        $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since, $fields, $protected);
         $response = $page['response'] ?? null;
         if (!is_array($response) || !isset($response['numFound']) || !is_array($response['docs'] ?? null)) {
             throw new RuntimeException(Translation::get('exception.solr_response_invalid'));
@@ -377,7 +400,7 @@ final class SolrExportService
             }
 
             $cursor = $nextCursor;
-            $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since, $fields);
+            $page = $this->query($connection['read'], $cursor, self::PAGE_SIZE, $since, $fields, $protected);
             $response = $page['response'] ?? null;
             if (!is_array($response) || !is_array($response['docs'] ?? null)) {
                 throw new RuntimeException(Translation::get('exception.solr_response_invalid'));
@@ -423,11 +446,12 @@ final class SolrExportService
      * @param int $rows Maximum number of documents requested for the page.
      * @param string|null $since Inclusive UTC lower bound for the changed field.
      * @param string[]|null $fields Explicit fields to retrieve instead of the configured export fields.
+     * @param bool $protected Whether to match only access-restricted documents instead of public ones.
      * @return array<string, mixed> Decoded Solr response containing document data and cursor metadata.
      * @throws RuntimeException If Solr returns a non-success status or a non-array JSON value.
      * @throws \JsonException If the response body is not valid JSON.
      */
-    private function query(array $readConfiguration, string $cursor, int $rows, ?string $since = null, ?array $fields = null): array
+    private function query(array $readConfiguration, string $cursor, int $rows, ?string $since = null, ?array $fields = null, bool $protected = false): array
     {
         $fields ??= array_unique(array_merge(
             ['id', 'type'],
@@ -441,11 +465,10 @@ final class SolrExportService
             'rows' => (string)$rows,
             'sort' => 'id asc',
             'cursorMark' => $cursor,
+            'fq' => ($since !== null ? '+changed:[' . $since . ' TO *] ' : '')
+                . ($protected ? self::PROTECTED_ACCESS_FILTER : self::PUBLIC_ACCESS_FILTER),
             'wt' => 'json',
         ];
-        if ($since !== null) {
-            $parameters['fq'] = 'changed:[' . $since . ' TO *]';
-        }
 
         return $this->request($readConfiguration, $parameters);
     }
