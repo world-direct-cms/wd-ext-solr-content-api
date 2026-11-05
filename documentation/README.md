@@ -18,7 +18,7 @@
 
 ## Zweck und Umfang
 
-`EXT:solr-content-api` stellt für TYPO3 eine authentifizierte REST-Schnittstelle bereit, die Inhalte aus den konfigurierten Solr-Cores ausliefert. Solr ist die einzige Quelle für exportierte Dokumente. Die Extension lädt deren Inhalt nicht aus TYPO3 nach und normalisiert die Solr-Feldnamen oder -Werte nicht.
+`EXT:solr-content-api` stellt für TYPO3 eine authentifizierte REST-Schnittstelle bereit, die Inhalte aus den konfigurierten Solr-Cores ausliefert. Solr ist die einzige Quelle für exportierte Dokumente. Die Extension lädt deren Inhalt nicht aus TYPO3 nach und normalisiert Solr-Werte nicht; Feldnamen bleiben bis auf die in `fieldAliases` konfigurierten Umbenennungen erhalten.
 
 Die Extension unterstützt PHP ab 8.1, TYPO3 12.4 und 13.4 sowie EXT:solr 12.1. Die API verwendet den Prefix `/api/v1` und unterstützt ausschließlich `GET`.
 
@@ -39,14 +39,23 @@ Die Feld-Allowlist befindet sich in [`Configuration/ExportFields.php`](../Config
 
 | Type                        | Zusätzliche Felder                                              |
 | --------------------------- | --------------------------------------------------------------- |
-| `pages`                     | `url`, `title`, `content`                                       |
+| `pages`                     | `url`, `title`, `content`, `fileUids_intM` (als `files`)        |
 | `fe_users`                  | `url`, `title`, `content`                                       |
 | `tx_news_domain_model_news` | `url`, `author`, `title`, `teaser`, `content`, `year_intS`      |
 | `sys_file_metadata`         | `fileExtension`, `title_stringS`, `size_intS`, `content`, `url` |
 
-Die gemeinsamen Felder sind `type`, `uid`, `pid`, `created`, `changed` und `indexed`. Ausgegeben werden nur konfigurierte Felder, die im jeweiligen Solr-Dokument vorhanden sind. Feldnamen und Werte bleiben erhalten. Weitere interne Solr-Felder wie `id` werden nicht exportiert. Die URL eines Datei-Dokuments ist keine Zusicherung, dass der Client die Datei ohne zusätzliche Berechtigungen abrufen kann.
+Die gemeinsamen Felder sind `type`, `uid`, `pid`, `created`, `changed` und `indexed`. Ausgegeben werden nur konfigurierte Felder, die im jeweiligen Solr-Dokument vorhanden sind. Werte bleiben erhalten; Feldnamen werden nur gemäß `fieldAliases` umbenannt (`fileUids_intM` → `files`). Weitere interne Solr-Felder wie `id` werden nicht exportiert. Die URL eines Datei-Dokuments ist keine Zusicherung, dass der Client die Datei ohne zusätzliche Berechtigungen abrufen kann.
 
 Die Type-Liste steuert sowohl die Feldfilterung als auch die Erkennung von TYPO3-Soft-Deletes. Types müssen dafür den jeweiligen TYPO3-Tabellennamen entsprechen.
+
+### Dateien einer Seite
+
+`PageFilesIndexingListener` ergänzt beim Indexieren einer Seite (`AfterPageDocumentIsCreatedForIndexingEvent`) das mehrwertige Solr-Feld `fileUids_intM`. `PageFileRepository` ermittelt dafür die `sys_file_metadata`-UIDs (Standardsprache, entspricht der UID der Datei-Dokumente) aller Dateien aus:
+
+- `sys_file_reference` der Seite selbst (`pages`) und der auf der Seite sichtbaren Inhaltselemente (`tt_content`, Sprache der Seite oder `-1`, Frontend-Restriktionen),
+- Datei-Links in Feldern dieser Inhaltselemente (z. B. RTE `t3://file?uid=…`) laut `sys_refindex`.
+
+Nicht erfasst werden Dateien, die Plugins dynamisch ausgeben, ordnerbasierte Dateisammlungen sowie Inhalte, die per Shortcut/Referenz von anderen Seiten eingebunden werden. Seiten ohne Dateien enthalten kein `files`-Feld. Nach dem Deployment ist ein Re-Indexing der Seiten-Queue nötig; die Linkerkennung setzt einen aktuellen Referenzindex voraus.
 
 ## Komponenten
 
@@ -56,6 +65,7 @@ Die Type-Liste steuert sowohl die Feldfilterung als auch die Erkennung von TYPO3
 - `FileExportCommand` stellt den TYPO3-Befehl `solr-content-api:file-export` bereit.
 - `ExportFileWriter` schreibt die Ausgabe zunächst in temporäre Dateien. Erst nach erfolgreichem Abschluss wird `export.json` atomar ersetzt.
 - `FileDeletionListener` erfasst vor einer FAL-Dateilöschung die zugehörigen `sys_file_metadata`-UIDs und speichert nach erfolgreicher Löschung ein Ereignis für die `changes`-API.
+- `PageFilesIndexingListener` schreibt beim Indexieren einer Seite die verwendeten Dateien in `fileUids_intM`.
 
 ## API-Endpunkte
 

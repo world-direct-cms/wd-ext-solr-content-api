@@ -23,7 +23,7 @@ final class SolrExportService
     private const PAGE_SIZE = 500;
     private const REQUEST_TIMEOUT = 10;
 
-    /** @var array{default: string[], types: array<string, string[]>, withdrawalFields?: array<string, string>} */
+    /** @var array{default: string[], types: array<string, string[]>, withdrawalFields?: array<string, string>, fieldAliases?: array<string, string>} */
     private array $fieldConfiguration;
 
     /**
@@ -388,8 +388,10 @@ final class SolrExportService
     /**
      * Retains configured default and type-specific fields from a document.
      *
+     * Fields listed in `fieldAliases` are renamed for the API response, e.g. `fileUids_intM` becomes `files`.
+     *
      * @param array<string, mixed> $document Raw Solr document, optionally containing a multivalued type field.
-     * @return array<string, mixed> Document containing only fields allowed for its type.
+     * @return array<string, mixed> Document containing only fields allowed for its type, using API field names.
      */
     private function filterDocument(array $document): array
     {
@@ -406,7 +408,7 @@ final class SolrExportService
         $filteredDocument = [];
         foreach ($allowedFields as $field) {
             if (array_key_exists($field, $document)) {
-                $filteredDocument[$field] = $document[$field];
+                $filteredDocument[$this->fieldConfiguration['fieldAliases'][$field] ?? $field] = $document[$field];
             }
         }
 

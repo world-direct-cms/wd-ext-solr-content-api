@@ -17,3 +17,9 @@ services:
         identifier: solr-content-api-after-file-deleted
         event: TYPO3\CMS\Core\Resource\Event\AfterFileDeletedEvent
         method: persistDeletionEvents
+
+  WorldDirect\SolrContentApi\EventListener\PageFilesIndexingListener:
+    tags:
+      - name: event.listener
+        identifier: solr-content-api-page-files
+        event: ApacheSolrForTypo3\Solr\Event\Indexing\AfterPageDocumentIsCreatedForIndexingEvent

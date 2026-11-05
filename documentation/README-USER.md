@@ -65,13 +65,16 @@ Die Antwort enthält `exportTimestamp` sowie `types`. Jeder Type enthält `count
           "indexed": "2026-10-16T09:31:00Z",
           "url": "https://www.example.com/beispiel",
           "title": "Beispiel",
-          "content": "Beispielinhalt"
+          "content": "Beispielinhalt",
+          "files": [456, 789]
         }
       ]
     }
   }
 }
 ```
+
+Bei `pages` enthält `files` die UIDs der auf der Seite eingebundenen oder verlinkten Dateien. Es sind dieselben UIDs wie bei den `sys_file_metadata`-Dokumenten. Seiten ohne Dateien haben kein `files`-Feld. Von Plugins dynamisch ausgegebene Dateien sind nicht enthalten.
 
 ### changes
 
