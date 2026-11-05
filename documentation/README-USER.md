@@ -74,7 +74,7 @@ Die Antwort enthält `exportTimestamp` sowie `types`. Jeder Type enthält `count
 }
 ```
 
-Bei `pages` enthält `files` die UIDs der auf der Seite eingebundenen oder verlinkten Dateien. Es sind dieselben UIDs wie bei den `sys_file_metadata`-Dokumenten. Seiten ohne Dateien haben kein `files`-Feld. Von Plugins dynamisch ausgegebene Dateien sind nicht enthalten.
+Bei `pages` enthält `files` die UIDs der auf der Seite eingebundenen oder verlinkten Dateien. Es sind dieselben UIDs wie bei den `sys_file_metadata`-Dokumenten. Seiten ohne Dateien haben kein `files`-Feld. Von Plugins dynamisch ausgegebene Dateien sind nicht enthalten. Dateien aus Inhaltselementen mit Zugriffsbeschränkung auf Frontend-Gruppen sind ebenfalls nicht enthalten.
 
 ### changes
 
@@ -143,7 +143,7 @@ Die Abfrage liest live aus Solr und erzeugt keine Exportdatei. Dokumente, die in
 
 ## Antworten und Fehler
 
-Erfolgreiche Antworten sind JSON. Solr-Feldnamen und -Werte werden nicht umbenannt. Gemeinsame Felder sind `type`, `uid`, `pid`, `created`, `changed` und `indexed`; zusätzliche Felder hängen vom Type ab. Nicht konfigurierte und im Solr-Dokument fehlende Felder werden nicht ausgegeben.
+Erfolgreiche Antworten sind JSON. Solr-Feldnamen und -Werte bleiben unverändert; einzige Ausnahme ist `files` bei `pages` (intern `fileUids_intM`). Gemeinsame Felder sind `type`, `uid`, `pid`, `created`, `changed` und `indexed`; zusätzliche Felder hängen vom Type ab. Nicht konfigurierte und im Solr-Dokument fehlende Felder werden nicht ausgegeben.
 
 Fehler haben die Form:
 
@@ -176,6 +176,7 @@ Fehlermeldungen enthalten keine Solr-Zugangsdaten oder technischen Exception-Det
 - `changes` verwendet den inklusiven Filter `changed >= since`. Wiederholte Einträge an Zeitgrenzen sind möglich; Clients sollten Upserts und Deletes idempotent verarbeiten.
 - TYPO3-Soft-Deletes werden anhand der TCA-Felder `delete` und `tstamp` ermittelt. Bei `fe_users` wird `withdraw_date > 0` als Rücknahme behandelt und über `tstamp` zeitlich eingeordnet.
 - Löschungen von FAL-Dateien werden über TYPO3-Datei-Events gespeichert und als Delete der betroffenen `sys_file_metadata`-UID gemeldet.
+- Inhalte mit Zugriffsbeschränkung auf Frontend-Gruppen werden nie ausgeliefert. Wird ein Inhalt nachträglich eingeschränkt, meldet `changes` ihn als Delete.
 - Andere Hard-Deletes und ausgeblendete Datensätze ohne Soft-Delete werden nicht zuverlässig gemeldet. Reine Neuindexierungen ohne Änderung des Solr-Felds `changed` erscheinen ebenfalls nicht in `changes`.
 - `changes` liefert aktuelle Inhalte und erkannte Löschungen, keine vollständige Änderungshistorie. Für regelmäßige Synchronisation sind überlappende Zeitfenster, idempotente Verarbeitung und gelegentlicher Abgleich mit `/index` sinnvoll.
 

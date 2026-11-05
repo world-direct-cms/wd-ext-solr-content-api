@@ -57,6 +57,8 @@ Die Type-Liste steuert sowohl die Feldfilterung als auch die Erkennung von TYPO3
 
 Nicht erfasst werden Dateien, die Plugins dynamisch ausgeben, ordnerbasierte Dateisammlungen sowie Inhalte, die per Shortcut/Referenz von anderen Seiten eingebunden werden. Seiten ohne Dateien enthalten kein `files`-Feld. Nach dem Deployment ist ein Re-Indexing der Seiten-Queue nötig; die Linkerkennung setzt einen aktuellen Referenzindex voraus.
 
+EXT:solr indexiert Seiten mit zugriffsbeschränkten Inhaltselementen in mehreren Varianten (eine je Gruppenkombination). Die Frontend-Restriktionen gelten jeweils für die Gruppen der Variante; die API liefert nur die öffentliche Variante (`access` = `c:0`). `files` enthält daher keine Dateien aus Inhaltselementen mit Frontend-Gruppen. Seiten, die selbst oder über eine übergeordnete Seite eingeschränkt sind, werden samt `files` nicht ausgeliefert.
+
 ## Komponenten
 
 - `ApiMiddleware` prüft den API-Prefix, die HTTP-Methode, Route, API-Key und Query-Parameter. Anfragen außerhalb des Prefixes werden an die nächste Middleware weitergegeben.
@@ -101,6 +103,7 @@ Der Endpoint liest live aus Solr, erzeugt aber keine Exportdatei. Derselbe Eintr
 - `changes` verwendet das Solr-Feld `changed`; eine reine Neuindexierung ohne Änderung dieses Felds wird nicht gemeldet.
 - TYPO3-Soft-Deletes werden anhand der TCA-Felder `delete` und `tstamp` gesucht. Bei `fe_users` gilt `withdraw_date > 0` als Rücknahme; für den Zeitfilter wird `tstamp` verwendet.
 - FAL-Dateilöschungen werden über Datei-Events erfasst und dauerhaft in `tx_solrcontentapi_file_deletion` gespeichert.
+- Dokumente mit Zugriffsbeschränkung (Solr-Feld `access` ungleich `c:0`/`r:0`, d. h. Frontend-Gruppen auf Seite, Inhalt oder Datensatz) werden von Export, `index`, `detail` und `changes` ausgeschlossen. Wurden sie seit `since` geändert, meldet `changes` sie als Delete, sofern keine öffentliche Variante desselben Dokuments existiert.
 - Andere Hard-Deletes und ausgeblendete Datensätze ohne erfasstes Soft-Delete werden nicht als Löschung erkannt.
 - `changes` liefert aktuelle Dokumentinhalte und Löschereignisse, keine vollständige Änderungshistorie. Da der Filter inklusiv ist, kann ein Client Grenzfälle erneut erhalten und sollte Ereignisse idempotent verarbeiten.
 
