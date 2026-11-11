@@ -36,7 +36,7 @@
       <trans-unit id="exception.export_file_close"><source>Could not close the export file.</source><target>Die Exportdatei konnte nicht geschlossen werden.</target></trans-unit>
       <trans-unit id="exception.export_file_replace"><source>Could not replace the export file.</source><target>Die Exportdatei konnte nicht ersetzt werden.</target></trans-unit>
       <trans-unit id="exception.export_file_write"><source>Could not write the export file.</source><target>Die Exportdatei konnte nicht geschrieben werden.</target></trans-unit>
-      <trans-unit id="command.description"><source>Solr Content API - File Export</source><target>Solr Content API - Dateiexport</target></trans-unit>
+      <trans-unit id="command.description"><source>Export Solr documents to the Solr Content API JSON file.</source><target>Solr-Dokumente in die Solr-Content-API-JSON-Datei exportieren.</target></trans-unit>
       <trans-unit id="command.failed"><source>File export failed. Check the TYPO3 log for details.</source><target>Der Dateiexport ist fehlgeschlagen. Details stehen im TYPO3-Log.</target></trans-unit>
       <trans-unit id="command.success"><source>Solr Content API - File Export written to "%s".</source><target>Solr Content API - Dateiexport wurde nach "%s" geschrieben.</target></trans-unit>
     </body>

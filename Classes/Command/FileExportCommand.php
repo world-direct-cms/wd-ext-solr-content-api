@@ -17,7 +17,8 @@ use WorldDirect\SolrContentApi\Service\SolrExportService;
  * Generates the Solr JSON export through the TYPO3 command-line interface.
  */
 #[AsCommand(
-    name: 'solr-content-api:file-export'
+    name: 'solr-content-api:file-export',
+    description: 'Export Solr documents to the Solr Content API JSON file.'
 )]
 final class FileExportCommand extends Command
 {
