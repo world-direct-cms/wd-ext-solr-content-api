@@ -46,6 +46,7 @@
       <trans-unit id="probe.export_file.missing"><source>The export file does not exist or is not readable.</source><target>Die Exportdatei existiert nicht oder ist nicht lesbar.</target></trans-unit>
       <trans-unit id="probe.export_file.stale"><source>The export file was generated at %s and is older than %d hours.</source><target>Die Exportdatei wurde am %s erzeugt und ist älter als %d Stunden.</target></trans-unit>
       <trans-unit id="probe.export_file.exception"><source>The export file could not be checked.</source><target>Die Exportdatei konnte nicht geprüft werden.</target></trans-unit>
+      <trans-unit id="probe.export_file.no_scheduler_task"><source>Hint: No active scheduler task runs "%s". If the export is not triggered via cron, set up a scheduler task.</source><target>Hinweis: Kein aktiver Scheduler-Task führt "%s" aus. Falls der Export nicht per Cron angestoßen wird, einen Scheduler-Task einrichten.</target></trans-unit>
       <trans-unit id="probe.index_documents.title"><source>Solr Content API: indexed documents</source><target>Solr Content API: indexierte Dokumente</target></trans-unit>
       <trans-unit id="probe.index_documents.success"><source>Type "%s": %d public documents in Solr.</source><target>Typ "%s": %d öffentliche Dokumente in Solr.</target></trans-unit>
       <trans-unit id="probe.index_documents.empty"><source>Type "%s": no public documents in Solr.</source><target>Typ "%s": keine öffentlichen Dokumente in Solr.</target></trans-unit>

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace WorldDirect\SolrContentApi\Probe;
 
+use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
 use WorldDirect\Healthcheck\Probe\ProbeBase;
 use WorldDirect\Healthcheck\Probe\ProbeInterface;
 use WorldDirect\SolrContentApi\Export\ExportFileWriter;
@@ -14,6 +17,8 @@ use WorldDirect\SolrContentApi\Export\ExportFileWriter;
 final class ExportFileProbe extends ProbeBase implements ProbeInterface
 {
     private const MAX_AGE_HOURS = 26;
+
+    private const COMMAND_NAME = 'solr-content-api:file-export';
 
     /**
      * The probe has no optional dependencies and always runs.
@@ -51,10 +56,12 @@ final class ExportFileProbe extends ProbeBase implements ProbeInterface
 
             if ($modified === false) {
                 $this->result->addErrorMessage($this->label('probe.export_file.missing'));
+                $this->addSchedulerHint();
             } elseif (time() - $modified > self::MAX_AGE_HOURS * 3600) {
                 $this->result->addErrorMessage(
                     $this->label('probe.export_file.stale', gmdate('Y-m-d\TH:i:s\Z', $modified), self::MAX_AGE_HOURS)
                 );
+                $this->addSchedulerHint();
             } else {
                 $this->result->addSuccessMessage(
                     $this->label('probe.export_file.success', gmdate('Y-m-d\TH:i:s\Z', $modified))
@@ -65,6 +72,51 @@ final class ExportFileProbe extends ProbeBase implements ProbeInterface
         }
 
         parent::stop();
+    }
+
+    /**
+     * Adds a hint when no active scheduler task runs the export command, as the export may also run via cron.
+     */
+    private function addSchedulerHint(): void
+    {
+        try {
+            if (!$this->hasActiveSchedulerTask()) {
+                $this->result->addErrorMessage($this->label('probe.export_file.no_scheduler_task', self::COMMAND_NAME));
+            }
+        } catch (\Throwable) {
+            // The hint is optional; the actual check result has already been reported.
+        }
+    }
+
+    /**
+     * Looks for an enabled scheduler task whose serialized command task references the export command.
+     *
+     * @return bool True if such a task exists.
+     */
+    private function hasActiveSchedulerTask(): bool
+    {
+        if (!ExtensionManagementUtility::isLoaded('scheduler')) {
+            return false;
+        }
+
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_scheduler_task');
+        $count = $queryBuilder
+            ->count('uid')
+            ->from('tx_scheduler_task')
+            ->where(
+                $queryBuilder->expr()->eq('deleted', 0),
+                $queryBuilder->expr()->eq('disable', 0),
+                $queryBuilder->expr()->like(
+                    'serialized_task_object',
+                    $queryBuilder->createNamedParameter(
+                        '%' . $queryBuilder->escapeLikeWildcards('"' . self::COMMAND_NAME . '"') . '%'
+                    )
+                )
+            )
+            ->executeQuery()
+            ->fetchOne();
+
+        return (int)$count > 0;
     }
 
     /**
