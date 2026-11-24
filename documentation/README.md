@@ -15,6 +15,7 @@
 - [Löschungen und Aktualität](#löschungen-und-aktualität)
 - [Sicherheit](#sicherheit)
 - [Betrieb und Voraussetzungen](#betrieb-und-voraussetzungen)
+  - [Healthcheck](#healthcheck)
 
 ## Zweck und Umfang
 
@@ -46,6 +47,10 @@ Die Feld-Allowlist befindet sich in [`Configuration/ExportFields.php`](../Config
 
 Die gemeinsamen Felder sind `type`, `uid`, `pid`, `created`, `changed` und `indexed`. Ausgegeben werden nur konfigurierte Felder, die im jeweiligen Solr-Dokument vorhanden sind. Werte bleiben erhalten; Feldnamen werden nur gemäß `fieldAliases` umbenannt (`fileUids_intM` → `files`). Weitere interne Solr-Felder wie `id` werden nicht exportiert. Die URL eines Datei-Dokuments ist keine Zusicherung, dass der Client die Datei ohne zusätzliche Berechtigungen abrufen kann.
 
+Projektspezifische Types werden nicht in der Extension, sondern im Projekt über `$GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportFields']` (z. B. in `config/system/additional.php`) ergänzt. Die Struktur entspricht `ExportFields.php`: `default` wird angehängt, Einträge in `types`, `withdrawalFields` und `fieldAliases` werden ergänzt bzw. ersetzen den Standardeintrag mit gleichem Schlüssel; `null` als Type-Wert entfernt einen Standard-Type.
+
+Über `$GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportTypes']` (Liste von Tabellennamen) lassen sich die exportierten Types einschränken. Nur diese Types werden für `file-export`, `changes` und `detail` in Solr abgefragt; ist die Liste leer oder nicht gesetzt, werden alle konfigurierten Types exportiert. Nicht konfigurierte Namen werden geloggt und ignoriert.
+
 Die Type-Liste steuert sowohl die Feldfilterung als auch die Erkennung von TYPO3-Soft-Deletes. Types müssen dafür den jeweiligen TYPO3-Tabellennamen entsprechen.
 
 ### Dateien einer Seite
@@ -68,6 +73,7 @@ EXT:solr indexiert Seiten mit zugriffsbeschränkten Inhaltselementen in mehreren
 - `ExportFileWriter` schreibt die Ausgabe zunächst in temporäre Dateien. Erst nach erfolgreichem Abschluss wird `export.json` atomar ersetzt.
 - `FileDeletionListener` erfasst vor einer FAL-Dateilöschung die zugehörigen `sys_file_metadata`-UIDs und speichert nach erfolgreicher Löschung ein Ereignis für die `changes`-API.
 - `PageFilesIndexingListener` schreibt beim Indexieren einer Seite die verwendeten Dateien in `fileUids_intM`.
+- `ExportFileProbe`, `IndexDocumentsProbe` und `ApiKeyProbe` sind Healthcheck-Probes für `worlddirect/healthcheck` (siehe [Healthcheck](#healthcheck)).
 
 ## API-Endpunkte
 

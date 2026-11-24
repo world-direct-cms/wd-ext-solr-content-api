@@ -9,6 +9,10 @@ services:
     # Probes depend on the optional worlddirect/healthcheck package; see Services.php
     exclude: "../Classes/Probe/*"
 
+  # Public so the healthcheck probe can resolve it lazily and catch configuration errors
+  WorldDirect\SolrContentApi\Service\SolrExportService:
+    public: true
+
   WorldDirect\SolrContentApi\EventListener\FileDeletionListener:
     tags:
       - name: event.listener

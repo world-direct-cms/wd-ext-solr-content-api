@@ -22,6 +22,8 @@
       <trans-unit id="log.core_unavailable"><source>Solr core health check failed.</source><target>Die Verfügbarkeitsprüfung eines Solr-Cores ist fehlgeschlagen.</target></trans-unit>
       <trans-unit id="exception.export_file_size"><source>Could not determine export file size.</source><target>Die Größe der Exportdatei konnte nicht ermittelt werden.</target></trans-unit>
       <trans-unit id="exception.no_cores"><source>No Solr cores are configured.</source><target>Es sind keine Solr-Cores konfiguriert.</target></trans-unit>
+      <trans-unit id="exception.no_export_types"><source>None of the selected export types is defined in the export field configuration.</source><target>Keiner der ausgewählten Exporttypen ist in der Exportfeld-Konfiguration definiert.</target></trans-unit>
+      <trans-unit id="log.unknown_export_types"><source>Selected export types are not defined in the export field configuration and are ignored: %s</source><target>Ausgewählte Exporttypen sind nicht in der Exportfeld-Konfiguration definiert und werden ignoriert: %s</target></trans-unit>
       <trans-unit id="exception.export_failed"><source>The Solr file export failed.</source><target>Der Solr-Dateiexport ist fehlgeschlagen.</target></trans-unit>
       <trans-unit id="exception.solr_response_invalid"><source>Solr returned an invalid response.</source><target>Solr hat eine ungültige Antwort geliefert.</target></trans-unit>
       <trans-unit id="exception.solr_status_invalid"><source>Solr returned a non-success status.</source><target>Solr hat einen nicht erfolgreichen HTTP-Status geliefert.</target></trans-unit>

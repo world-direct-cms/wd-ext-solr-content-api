@@ -26,8 +26,14 @@ final class SolrExportService
     private const PUBLIC_ACCESS_FILTER = '-access:[* TO "c:0"} -access:{"c:0" TO "r:0"} -access:{"r:0" TO *]';
     private const PROTECTED_ACCESS_FILTER = '+(access:[* TO "c:0"} access:{"c:0" TO "r:0"} access:{"r:0" TO *])';
 
-    /** @var array{default: string[], types: array<string, string[]>, withdrawalFields?: array<string, string>, fieldAliases?: array<string, string>} */
+    /** @var array{default: string[], types: array<string, string[]>, withdrawalFields: array<string, string>, fieldAliases: array<string, string>} */
     private array $fieldConfiguration;
+
+    /** Whether the project restricts the export to an explicit `exportTypes` selection. */
+    private bool $exportTypesSelected = false;
+
+    /** @var string[] Names selected in `exportTypes` that are not configured in `exportFields`. */
+    private array $unknownExportTypes = [];
 
     /**
      * Initializes export dependencies and loads the configured field allowlist.
@@ -47,7 +53,73 @@ final class SolrExportService
         private readonly ExportFileWriter $fileWriter,
         private readonly LoggerInterface $logger,
     ) {
-        $this->fieldConfiguration = require dirname(__DIR__, 2) . '/Configuration/ExportFields.php';
+        $this->fieldConfiguration = $this->mergeFieldConfiguration(
+            require dirname(__DIR__, 2) . '/Configuration/ExportFields.php',
+            $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportFields'] ?? [],
+        );
+        $this->fieldConfiguration['types'] = $this->selectConfiguredTypes(
+            $this->fieldConfiguration['types'],
+            $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportTypes'] ?? [],
+        );
+    }
+
+    /**
+     * Extends the extension defaults with the project configuration.
+     *
+     * `default` fields are appended; entries of `types`, `withdrawalFields` and `fieldAliases`
+     * are added or replace the default entry with the same key.
+     *
+     * @param array{default?: string[], types?: array<string, string[]>, withdrawalFields?: array<string, string>, fieldAliases?: array<string, string>} $defaults Configuration from ExportFields.php.
+     * @param mixed $project Value of $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportFields'].
+     * @return array{default: string[], types: array<string, string[]>, withdrawalFields: array<string, string>, fieldAliases: array<string, string>}
+     */
+    private function mergeFieldConfiguration(array $defaults, mixed $project): array
+    {
+        $project = is_array($project) ? $project : [];
+        $section = static fn(array $configuration, string $key): array => is_array($configuration[$key] ?? null) ? $configuration[$key] : [];
+
+        return [
+            'default' => array_values(array_unique([...$section($defaults, 'default'), ...$section($project, 'default')])),
+            'types' => array_filter(
+                array_replace($section($defaults, 'types'), $section($project, 'types')),
+                'is_array',
+            ),
+            'withdrawalFields' => array_replace($section($defaults, 'withdrawalFields'), $section($project, 'withdrawalFields')),
+            'fieldAliases' => array_replace($section($defaults, 'fieldAliases'), $section($project, 'fieldAliases')),
+        ];
+    }
+
+    /**
+     * Restricts the type allowlist to the types selected by the project configuration.
+     *
+     * @param array<string, string[]> $types All configured types (ExportFields.php merged with the project configuration).
+     * @param mixed $selection Value of $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportTypes'] (list of table names).
+     * @return array<string, string[]> Selected types in their definition order, or all types if none are selected.
+     * @throws RuntimeException If the selection contains no configured type.
+     */
+    private function selectConfiguredTypes(array $types, mixed $selection): array
+    {
+        $selected = array_values(array_filter(array_map(
+            static fn (mixed $type): string => trim((string)$type),
+            is_array($selection) ? $selection : [],
+        )));
+        if ($selected === []) {
+            return $types;
+        }
+        $this->exportTypesSelected = true;
+
+        $unknown = array_diff($selected, array_keys($types));
+        $this->unknownExportTypes = array_values($unknown);
+        if ($unknown !== []) {
+            $this->logger->warning(Translation::get('log.unknown_export_types', 'default', [implode(', ', $unknown)]));
+        }
+
+        $selectedTypes = array_intersect_key($types, array_flip($selected));
+        if ($selectedTypes === []) {
+            throw new RuntimeException(Translation::get('exception.no_export_types'));
+        }
+
+        return $selectedTypes;
     }
 
     /**
@@ -313,6 +385,70 @@ final class SolrExportService
     }
 
     /**
+     * Returns whether the project explicitly selects the exported types via `exportTypes`.
+     *
+     * @return bool True if `exportTypes` contains at least one table name.
+     */
+    public function hasExportTypeSelection(): bool
+    {
+        return $this->exportTypesSelected;
+    }
+
+    /**
+     * Returns table names selected in `exportTypes` that have no field configuration and are therefore ignored.
+     *
+     * @return string[] Unknown table names in selection order.
+     */
+    public function getUnknownExportTypes(): array
+    {
+        return $this->unknownExportTypes;
+    }
+
+    /**
+     * Counts public documents per active export type across all configured cores.
+     *
+     * Uses a type facet with rows=0, so no documents are transferred.
+     *
+     * @return array<string, int> Number of public documents per active export type, including types without documents.
+     * @throws RuntimeException If no cores are configured or Solr returns an unsuccessful or invalid response.
+     * @throws \JsonException If a Solr response cannot be decoded.
+     */
+    public function countPublicDocumentsByType(): array
+    {
+        $connections = $this->getConnections();
+        if ($connections === []) {
+            throw new RuntimeException(Translation::get('exception.no_cores'));
+        }
+
+        $counts = array_fill_keys(array_keys($this->fieldConfiguration['types']), 0);
+        foreach ($connections as $connection) {
+            $response = $this->request($connection['read'], [
+                'q' => '*:*',
+                'rows' => '0',
+                'fq' => $this->getTypeFilter() . ' ' . self::PUBLIC_ACCESS_FILTER,
+                'facet' => 'true',
+                'facet.field' => 'type',
+                'facet.limit' => '-1',
+                'facet.mincount' => '1',
+                'json.nl' => 'map',
+                'wt' => 'json',
+            ]);
+
+            $typeCounts = $response['facet_counts']['facet_fields']['type'] ?? null;
+            if (!is_array($typeCounts)) {
+                throw new RuntimeException(Translation::get('exception.solr_response_invalid'));
+            }
+            foreach ($typeCounts as $type => $count) {
+                if (isset($counts[$type])) {
+                    $counts[$type] += (int)$count;
+                }
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
      * Checks each configured core by issuing a document query without retrieving documents.
      *
      * @return bool Whether at least one core is configured and every core responds successfully.
@@ -466,11 +602,25 @@ final class SolrExportService
             'sort' => 'id asc',
             'cursorMark' => $cursor,
             'fq' => ($since !== null ? '+changed:[' . $since . ' TO *] ' : '')
+                . $this->getTypeFilter() . ' '
                 . ($protected ? self::PROTECTED_ACCESS_FILTER : self::PUBLIC_ACCESS_FILTER),
             'wt' => 'json',
         ];
 
         return $this->request($readConfiguration, $parameters);
+    }
+
+    /**
+     * Builds the Solr filter matching all active export types.
+     *
+     * @return string Required-clause filter on the type field.
+     */
+    private function getTypeFilter(): string
+    {
+        return '+type:(' . implode(' OR ', array_map(
+            static fn (string $type): string => '"' . $type . '"',
+            array_keys($this->fieldConfiguration['types']),
+        )) . ')';
     }
 
     /**

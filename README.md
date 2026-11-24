@@ -25,6 +25,7 @@ Detailed German documentation is available in [documentation/](documentation/):
 - [Errors](#errors)
 - [Data freshness and deletions](#data-freshness-and-deletions)
 - [Operation](#operation)
+  - [Healthcheck](#healthcheck)
 
 ## Requirements
 
@@ -32,6 +33,7 @@ Detailed German documentation is available in [documentation/](documentation/):
 - TYPO3 12.4 or 13.4
 - EXT:solr (`apache-solr-for-typo3/solr`) 12.1
 - Optional: `hmmh/solr-file-indexer` for indexing files as `sys_file_metadata` documents
+- Optional: `worlddirect/healthcheck` 4.5 or later for the [healthcheck probes](#healthcheck)
 
 ## Installation
 
@@ -69,7 +71,7 @@ All sites and all language connections provided by EXT:solr are used. Scheme, ho
 
 ### Exported fields
 
-The field allowlist is defined in [Configuration/ExportFields.php](Configuration/ExportFields.php):
+The default field allowlist is defined in [Configuration/ExportFields.php](Configuration/ExportFields.php) and can be extended by the project (see below):
 
 | Type                        | Additional fields                                               |
 | --------------------------- | --------------------------------------------------------------- |
@@ -81,6 +83,33 @@ The field allowlist is defined in [Configuration/ExportFields.php](Configuration
 Common fields for all types are `type`, `uid`, `pid`, `created`, `changed` and `indexed`. Only configured fields present in the Solr document are returned. Values are passed through unchanged; field names are only renamed according to `fieldAliases` (`fileUids_intM` → `files`). Internal fields such as `id` are not exported.
 
 Type names must match TYPO3 table names, because the list also controls the detection of soft deletes. `withdrawalFields` defines tables that use a withdrawal field instead of the TCA `delete` field (`fe_users.withdraw_date`).
+
+#### Project-specific types
+
+`ExportFields.php` only contains the defaults. Projects add their own tables without changing the extension, e.g. in `config/system/additional.php` or an extension's `ext_localconf.php`:
+
+```php
+$GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportFields'] = [
+    'default' => [],                      // appended to the common fields
+    'types' => [
+        'tx_bigprojects_domain_model_project' => ['url', 'title'],
+        'fe_users' => null,               // null removes a default type
+    ],
+    'withdrawalFields' => [],             // table => withdrawal field
+    'fieldAliases' => [],                 // Solr field => API name
+];
+
+// Optional: restrict the export to these types (empty or not set = all configured types)
+$GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['solr_content_api']['exportTypes'] = [
+    'pages',
+    'sys_file_metadata',
+    'tx_bigprojects_domain_model_project',
+];
+```
+
+Entries in `types`, `withdrawalFields` and `fieldAliases` are added or replace the default entry with the same key.
+
+`exportTypes` selects the active types. Only selected types are queried in Solr for `file-export`, `changes` and `detail`; all others are omitted. An empty or missing value exports all configured types. Names that are not configured are logged and ignored.
 
 The URL of a file document does not guarantee that the client may download the file without further authorization.
 
