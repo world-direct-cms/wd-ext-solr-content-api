@@ -244,3 +244,15 @@ Errors use the format `{ "error": { "code": "...", "message": "..." } }`. Messag
 - `/var/www/html/var/json` must be writable by the TYPO3 process; it is created if missing.
 - Run `solr-content-api:file-export` regularly (TYPO3 scheduler or cron) to keep `/file-export` up to date.
 - The EXT:solr index queue worker and the file indexer must be running so that changes appear in Solr promptly.
+
+### Healthcheck
+
+If `worlddirect/healthcheck` is installed, the extension registers three probes. They appear in `/healthcheck/` and can be paused individually:
+
+| Probe                 | Fails if                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| `ExportFileProbe`     | `export.json` is missing, not readable or was last written more than 26 hours ago.                  |
+| `IndexDocumentsProbe` | A table listed in `exportTypes` has no public document in any core, has no field configuration, or Solr cannot be queried. |
+| `ApiKeyProbe`         | No active (not hidden, not deleted) API key exists.                                                 |
+
+The age of the export file is taken from its modification time; it only changes when an export succeeds. `IndexDocumentsProbe` only checks the tables explicitly listed in `exportTypes`; without `exportTypes` it reports a hint and counts nothing. Without `worlddirect/healthcheck` the probes are neither registered nor loaded.

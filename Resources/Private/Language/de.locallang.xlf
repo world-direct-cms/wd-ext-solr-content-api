@@ -39,6 +39,21 @@
       <trans-unit id="command.description"><source>Export Solr documents to the Solr Content API JSON file.</source><target>Solr-Dokumente in die Solr-Content-API-JSON-Datei exportieren.</target></trans-unit>
       <trans-unit id="command.failed"><source>File export failed. Check the TYPO3 log for details.</source><target>Der Dateiexport ist fehlgeschlagen. Details stehen im TYPO3-Log.</target></trans-unit>
       <trans-unit id="command.success"><source>Solr Content API - File Export written to "%s".</source><target>Solr Content API - Dateiexport wurde nach "%s" geschrieben.</target></trans-unit>
+      <trans-unit id="probe.export_file.title"><source>Solr Content API: export file</source><target>Solr Content API: Exportdatei</target></trans-unit>
+      <trans-unit id="probe.export_file.success"><source>The export file was generated at %s.</source><target>Die Exportdatei wurde am %s erzeugt.</target></trans-unit>
+      <trans-unit id="probe.export_file.missing"><source>The export file does not exist or is not readable.</source><target>Die Exportdatei existiert nicht oder ist nicht lesbar.</target></trans-unit>
+      <trans-unit id="probe.export_file.stale"><source>The export file was generated at %s and is older than %d hours.</source><target>Die Exportdatei wurde am %s erzeugt und ist älter als %d Stunden.</target></trans-unit>
+      <trans-unit id="probe.export_file.exception"><source>The export file could not be checked.</source><target>Die Exportdatei konnte nicht geprüft werden.</target></trans-unit>
+      <trans-unit id="probe.index_documents.title"><source>Solr Content API: indexed documents</source><target>Solr Content API: indexierte Dokumente</target></trans-unit>
+      <trans-unit id="probe.index_documents.success"><source>Type "%s": %d public documents in Solr.</source><target>Typ "%s": %d öffentliche Dokumente in Solr.</target></trans-unit>
+      <trans-unit id="probe.index_documents.empty"><source>Type "%s": no public documents in Solr.</source><target>Typ "%s": keine öffentlichen Dokumente in Solr.</target></trans-unit>
+      <trans-unit id="probe.index_documents.unknown"><source>Type "%s" is selected in exportTypes but has no field configuration.</source><target>Typ "%s" ist in exportTypes ausgewählt, hat aber keine Feldkonfiguration.</target></trans-unit>
+      <trans-unit id="probe.index_documents.not_configured"><source>No exportTypes configured, the document check is skipped.</source><target>Keine exportTypes konfiguriert, die Dokumentprüfung wird übersprungen.</target></trans-unit>
+      <trans-unit id="probe.index_documents.exception"><source>The Solr index could not be queried.</source><target>Der Solr-Index konnte nicht abgefragt werden.</target></trans-unit>
+      <trans-unit id="probe.api_key.title"><source>Solr Content API: API keys</source><target>Solr Content API: API-Keys</target></trans-unit>
+      <trans-unit id="probe.api_key.success"><source>%d active API key(s) available.</source><target>%d aktive(r) API-Key(s) vorhanden.</target></trans-unit>
+      <trans-unit id="probe.api_key.missing"><source>No active API key is available.</source><target>Es ist kein aktiver API-Key vorhanden.</target></trans-unit>
+      <trans-unit id="probe.api_key.exception"><source>The API keys could not be checked.</source><target>Die API-Keys konnten nicht geprüft werden.</target></trans-unit>
     </body>
   </file>
 </xliff>

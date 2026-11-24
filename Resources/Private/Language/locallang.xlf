@@ -39,6 +39,21 @@
       <trans-unit id="command.description"><source>Export Solr documents to the Solr Content API JSON file.</source></trans-unit>
       <trans-unit id="command.failed"><source>File export failed. Check the TYPO3 log for details.</source></trans-unit>
       <trans-unit id="command.success"><source>Solr Content API - File Export written to "%s".</source></trans-unit>
+      <trans-unit id="probe.export_file.title"><source>Solr Content API: export file</source></trans-unit>
+      <trans-unit id="probe.export_file.success"><source>The export file was generated at %s.</source></trans-unit>
+      <trans-unit id="probe.export_file.missing"><source>The export file does not exist or is not readable.</source></trans-unit>
+      <trans-unit id="probe.export_file.stale"><source>The export file was generated at %s and is older than %d hours.</source></trans-unit>
+      <trans-unit id="probe.export_file.exception"><source>The export file could not be checked.</source></trans-unit>
+      <trans-unit id="probe.index_documents.title"><source>Solr Content API: indexed documents</source></trans-unit>
+      <trans-unit id="probe.index_documents.success"><source>Type "%s": %d public documents in Solr.</source></trans-unit>
+      <trans-unit id="probe.index_documents.empty"><source>Type "%s": no public documents in Solr.</source></trans-unit>
+      <trans-unit id="probe.index_documents.unknown"><source>Type "%s" is selected in exportTypes but has no field configuration.</source></trans-unit>
+      <trans-unit id="probe.index_documents.not_configured"><source>No exportTypes configured, the document check is skipped.</source></trans-unit>
+      <trans-unit id="probe.index_documents.exception"><source>The Solr index could not be queried.</source></trans-unit>
+      <trans-unit id="probe.api_key.title"><source>Solr Content API: API keys</source></trans-unit>
+      <trans-unit id="probe.api_key.success"><source>%d active API key(s) available.</source></trans-unit>
+      <trans-unit id="probe.api_key.missing"><source>No active API key is available.</source></trans-unit>
+      <trans-unit id="probe.api_key.exception"><source>The API keys could not be checked.</source></trans-unit>
     </body>
   </file>
 </xliff>

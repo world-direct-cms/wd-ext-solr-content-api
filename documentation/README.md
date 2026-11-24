@@ -120,3 +120,15 @@ Der Klartext-Key wird ausschließlich beim Client im Header `X-Api-Key` übertra
 - Der File-Export-Command sollte regelmäßig als TYPO3 Scheduled Task oder externer Cronjob gestartet werden, wenn `/file-export` aktuell gehalten werden soll.
 - Die TYPO3-Index-Queue-Worker und der Datei-Indexer müssen laufen, damit Änderungen und neue Dateien zeitnah in Solr erscheinen.
 - Datenbankschema und Event-Listener der Extension müssen über den regulären TYPO3-Installations-/Cache-Prozess aktiv sein.
+
+### Healthcheck
+
+Ist `worlddirect/healthcheck` (ab 4.5) installiert, registriert die Extension in `ext_localconf.php` drei Probes. Sie erscheinen unter `/healthcheck/` und lassen sich einzeln pausieren. Ohne die Healthcheck-Extension werden sie weder registriert noch geladen (`Configuration/Services.php`).
+
+| Probe                 | Schlägt fehl, wenn                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `ExportFileProbe`     | `export.json` fehlt, nicht lesbar ist oder zuletzt vor mehr als 26 Stunden geschrieben wurde.                       |
+| `IndexDocumentsProbe` | eine in `exportTypes` eingetragene Tabelle in keinem Core ein öffentliches Dokument hat, keine Feldkonfiguration besitzt oder Solr nicht abfragbar ist. |
+| `ApiKeyProbe`         | kein aktiver (nicht versteckter, nicht gelöschter) API-Key existiert.                                               |
+
+Das Alter der Exportdatei ergibt sich aus ihrem Änderungsdatum, das sich nur bei einem erfolgreichen Export ändert. `IndexDocumentsProbe` prüft nur die ausdrücklich in `exportTypes` eingetragenen Tabellen; ohne `exportTypes` meldet sie lediglich einen Hinweis und zählt nichts. Sie zählt pro Core mit einer Facettenabfrage (`rows=0`) und denselben Typ- und Zugriffsfiltern wie die API.
